@@ -1,16 +1,21 @@
 import supabase from "../main_server.js"
+import { add_patient_profile } from "../models/patient.js";
 
 const signupPatient=async (req, res) => {
 
     try {
-        const {email, password}=req.body;
+        const {email, password, username, age=null, phone_no=null}=req.body;
         console.log(email, password);
         const {data, error}=await supabase.auth.signUp({email, password});
 
         if(error){
             console.log(error);
-            return res.json({status: error.status, code: error.code, reason: error.reason || "none"});
-        }
+            return res.json({
+                status: error.status, 
+                code: error.code, 
+                reason: error.reason || "none"
+            });
+        };
 
         res.json({
             message: "Signup Successful",
@@ -25,6 +30,10 @@ const signupPatient=async (req, res) => {
                 refresh_token: data.session.refresh_token
             }
         });
+
+        const result= await add_patient_profile(data.user.id, username, email, phone_no, age);
+        console.log(result);
+
 
     } catch (error) {
         console.log(error);
