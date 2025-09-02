@@ -1,13 +1,15 @@
 import supabase from "../main_server.js";
 
-const add_patient_profile= async (uid, username, email, phone_no, age) => {
+const add_patient_profile= async (uid, firstName, lastName, email, gender, phone_no, age) => {
     const {error: insertError} = await supabase
         .from("Patient_Profile")
         .insert([
             {
                 id: uid,
-                username,
+                firstName,
+                lastName,
                 email,
+                gender,
                 phone_no,
                 age
             }

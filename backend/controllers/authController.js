@@ -4,7 +4,7 @@ import { add_patient_profile } from "../models/patient.js";
 const signupPatient=async (req, res) => {
 
     try {
-        const {email, password, username, age=null, phone_no=null}=req.body;
+        const {email, password, firstName, lastName, gender=null, age=null, phone_no=null}=req.body;
         console.log(email, password);
         const {data, error}=await supabase.auth.signUp({email, password});
 
@@ -22,7 +22,7 @@ const signupPatient=async (req, res) => {
             user: {
                 id: data.user.id,
                 email: data.user.email,
-                phone: data.user.phone
+                phone_no: data.user.phone
             },
             session: {
                 access_token: data.session.access_token,
@@ -31,7 +31,7 @@ const signupPatient=async (req, res) => {
             }
         });
 
-        const result= await add_patient_profile(data.user.id, username, email, phone_no, age);
+        const result= await add_patient_profile(data.user.id, firstName, lastName, email, gender, phone_no, age);
         console.log(result);
 
 
