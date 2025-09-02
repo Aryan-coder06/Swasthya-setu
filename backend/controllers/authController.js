@@ -5,24 +5,24 @@ const signupPatient=async (req, res) => {
     try {
         const {email, password}=req.body;
         console.log(email, password);
-        const result=await supabase.auth.signUp({email, password});
+        const {data, error}=await supabase.auth.signUp({email, password});
 
-        if(result.user== null){
-            return res.json({message: "User already signed up!"});
+        if(error){
+            console.log(error);
+            return res.json({status: error.status, code: error.code, reason: error.reason || "none"});
         }
 
-        console.log(result.data);
         res.json({
             message: "Signup Successful",
             user: {
-                id: result.user.id,
-                email: result.user.email,
-                phone: result.user.phone
+                id: data.user.id,
+                email: data.user.email,
+                phone: data.user.phone
             },
             session: {
-                access_token: result.session.access_token,
-                expires_in: result.session.expires_in,
-                refresh_token: result.session.refresh_token
+                access_token: data.session.access_token,
+                expires_in: data.session.expires_in,
+                refresh_token: data.session.refresh_token
             }
         });
 
