@@ -8,13 +8,25 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import axios from "axios";
 
 export default function AuthPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [selectedRole, setSelectedRole] = useState<string | null>(null);
   const [authMode, setAuthMode] = useState<"login" | "register">("login");
+  const [formData, setFormData] = useState({
+    firstName: "",
+    lastName: "",
+    phone: "",
+    email: "",
+    password: "",
+    gender: "",
+    age: "",
+  });
+  const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const router = useRouter();
 
   const roles = [
@@ -24,7 +36,7 @@ export default function AuthPage() {
       description: "Book appointments, manage records, access consultations",
       icon: User,
       color: "bg-blue-500",
-      route: "/patient"
+      route: "/patient",
     },
     {
       id: "doctor",
@@ -32,7 +44,7 @@ export default function AuthPage() {
       description: "Manage appointments, patient records, consultations",
       icon: Stethoscope,
       color: "bg-green-500",
-      route: "/doctor"
+      route: "/doctor",
     },
     {
       id: "receptionist",
@@ -40,16 +52,57 @@ export default function AuthPage() {
       description: "Handle appointments, billing, hospital management",
       icon: Users,
       color: "bg-purple-500",
-      route: "/receptionist"
-    }
+      route: "/receptionist",
+    },
   ];
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setFormData({ ...formData, [e.target.id]: e.target.value });
+  };
+
+  const handleGenderChange = (value: string) => {
+    setFormData({ ...formData, gender: value });
+  };
+
+  const handleRegister = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      const response = await axios.post(`http://localhost:5000/auth/signup/${selectedRole}`, {
+        email: formData.email,
+        password: formData.password,
+        firstName: formData.firstName,
+        lastName: formData.lastName,
+        phone: formData.phone,
+        gender: formData.gender,
+        age: formData.age,
+      });
+
+      setMessage({ type: "success", text: response.data.message });
+      setTimeout(() => {
+        router.push(roles.find((r) => r.id === selectedRole)!.route);
+      }, 2000);
+    } catch (error: any) {
+      console.error("Registration error:", error);
+      setMessage({
+        type: "error",
+        text:
+          error.response?.status === 404
+            ? "Backend server not found. Ensure the server is running on http://localhost:5000."
+            : error.response?.data?.reason || "Registration failed. Please try again.",
+      });
+    }
+  };
 
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
-    if (selectedRole) {
-      const role = roles.find(r => r.id === selectedRole);
-      if (role) {
-        router.push(role.route);
+    if (authMode === "register") {
+      handleRegister(e);
+    } else {
+      if (selectedRole) {
+        const role = roles.find((r) => r.id === selectedRole);
+        if (role) {
+          router.push(role.route);
+        }
       }
     }
   };
@@ -57,12 +110,12 @@ export default function AuthPage() {
   const containerVariants = {
     hidden: { opacity: 0, scale: 0.9 },
     visible: { opacity: 1, scale: 1 },
-    exit: { opacity: 0, scale: 0.9 }
+    exit: { opacity: 0, scale: 0.9 },
   };
 
   const itemVariants = {
     hidden: { y: 20, opacity: 0 },
-    visible: { y: 0, opacity: 1 }
+    visible: { y: 0, opacity: 1 },
   };
 
   if (!selectedRole) {
@@ -90,10 +143,7 @@ export default function AuthPage() {
             </motion.p>
           </div>
 
-          <motion.div
-            variants={itemVariants}
-            className="grid md:grid-cols-3 gap-6"
-          >
+          <motion.div variants={itemVariants} className="grid md:grid-cols-3 gap-6">
             {roles.map((role, index) => (
               <motion.div
                 key={role.id}
@@ -103,7 +153,7 @@ export default function AuthPage() {
                 whileHover={{ y: -5, scale: 1.02 }}
                 whileTap={{ scale: 0.98 }}
               >
-                <Card 
+                <Card
                   className="cursor-pointer border-2 hover:border-blue-300 hover:shadow-xl transition-all duration-300"
                   onClick={() => setSelectedRole(role.id)}
                 >
@@ -114,9 +164,7 @@ export default function AuthPage() {
                     <CardTitle className="text-2xl">{role.title}</CardTitle>
                   </CardHeader>
                   <CardContent className="text-center">
-                    <CardDescription className="text-gray-600 text-lg">
-                      {role.description}
-                    </CardDescription>
+                    <CardDescription className="text-gray-600 text-lg">{role.description}</CardDescription>
                     <Button className="mt-4 w-full" variant="outline">
                       Continue as {role.title}
                     </Button>
@@ -130,17 +178,11 @@ export default function AuthPage() {
     );
   }
 
-  const currentRole = roles.find(r => r.id === selectedRole)!;
+  const currentRole = roles.find((r) => r.id === selectedRole)!;
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-green-50 flex items-center justify-center p-4">
-      <motion.div
-        key="auth-form"
-        initial="hidden"
-        animate="visible"
-        variants={containerVariants}
-        className="w-full max-w-md"
-      >
+      <motion.div key="auth-form" initial="hidden" animate="visible" variants={containerVariants} className="w-full max-w-md">
         <div className="text-center mb-8">
           <button
             onClick={() => setSelectedRole(null)}
@@ -168,24 +210,25 @@ export default function AuthPage() {
                   <TabsTrigger value="login">Login</TabsTrigger>
                   <TabsTrigger value="register">Register</TabsTrigger>
                 </TabsList>
-                
+
                 <TabsContent value="login" className="mt-6">
                   <CardTitle>Welcome Back</CardTitle>
-                  <CardDescription>
-                    Sign in to access your {currentRole.title.toLowerCase()} dashboard
-                  </CardDescription>
+                  <CardDescription>Sign in to access your {currentRole.title.toLowerCase()} dashboard</CardDescription>
                 </TabsContent>
-                
+
                 <TabsContent value="register" className="mt-6">
                   <CardTitle>Create Account</CardTitle>
-                  <CardDescription>
-                    Join SwasthyaSetu as a {currentRole.title.toLowerCase()}
-                  </CardDescription>
+                  <CardDescription>Join SwasthyaSetu as a {currentRole.title.toLowerCase()}</CardDescription>
                 </TabsContent>
               </Tabs>
             </CardHeader>
-            
+
             <CardContent>
+              {message && (
+                <div className={`mb-4 p-2 text-center ${message.type === "success" ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"} rounded`}>
+                  {message.text}
+                </div>
+              )}
               <form onSubmit={handleLogin} className="space-y-4">
                 <AnimatePresence mode="wait">
                   {authMode === "register" && (
@@ -198,26 +241,43 @@ export default function AuthPage() {
                       <div className="grid grid-cols-2 gap-4">
                         <div>
                           <Label htmlFor="firstName">First Name</Label>
-                          <Input id="firstName" placeholder="John" />
+                          <Input id="firstName" placeholder="John" value={formData.firstName} onChange={handleInputChange} />
                         </div>
                         <div>
                           <Label htmlFor="lastName">Last Name</Label>
-                          <Input id="lastName" placeholder="Doe" />
+                          <Input id="lastName" placeholder="Doe" value={formData.lastName} onChange={handleInputChange} />
                         </div>
                       </div>
                       <div>
                         <Label htmlFor="phone">Phone Number</Label>
-                        <Input id="phone" type="tel" placeholder="+91 98765 43210" />
+                        <Input id="phone" type="tel" placeholder="+91 98765 43210" value={formData.phone} onChange={handleInputChange} />
+                      </div>
+                      <div>
+                        <Label htmlFor="gender">Gender</Label>
+                        <Select onValueChange={handleGenderChange} value={formData.gender}>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select gender" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="Male">Male</SelectItem>
+                            <SelectItem value="Female">Female</SelectItem>
+                            <SelectItem value="Other">Other</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div>
+                        <Label htmlFor="age">Age</Label>
+                        <Input id="age" type="number" placeholder="30" value={formData.age} onChange={handleInputChange} min="1" />
                       </div>
                     </motion.div>
                   )}
                 </AnimatePresence>
-                
+
                 <div>
                   <Label htmlFor="email">Email</Label>
-                  <Input id="email" type="email" placeholder="john@example.com" />
+                  <Input id="email" type="email" placeholder="john@example.com" value={formData.email} onChange={handleInputChange} />
                 </div>
-                
+
                 <div>
                   <Label htmlFor="password">Password</Label>
                   <div className="relative">
@@ -225,6 +285,8 @@ export default function AuthPage() {
                       id="password"
                       type={showPassword ? "text" : "password"}
                       placeholder="••••••••"
+                      value={formData.password}
+                      onChange={handleInputChange}
                     />
                     <button
                       type="button"
@@ -235,7 +297,7 @@ export default function AuthPage() {
                     </button>
                   </div>
                 </div>
-                
+
                 {authMode === "login" && (
                   <div className="flex items-center justify-between">
                     <label className="flex items-center">
@@ -247,11 +309,11 @@ export default function AuthPage() {
                     </Link>
                   </div>
                 )}
-                
+
                 <Button type="submit" className="w-full healthcare-gradient">
                   {authMode === "login" ? "Sign In" : "Create Account"}
                 </Button>
-                
+
                 <div className="relative">
                   <div className="absolute inset-0 flex items-center">
                     <span className="w-full border-t" />
@@ -260,7 +322,7 @@ export default function AuthPage() {
                     <span className="bg-white px-2 text-gray-500">Or continue with</span>
                   </div>
                 </div>
-                
+
                 <Button variant="outline" type="button" className="w-full">
                   <svg className="w-4 h-4 mr-2" viewBox="0 0 24 24">
                     <path
