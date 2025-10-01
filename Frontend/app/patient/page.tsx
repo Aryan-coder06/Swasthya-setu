@@ -22,7 +22,8 @@ import {
   Users,
   AlertCircle,
   CheckCircle,
-  Star
+  Star,
+  Upload
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -37,6 +38,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Toaster } from "@/components/ui/toaster";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import axios from "axios";
 
 export default function PatientDashboard() {
   const [selectedMenu, setSelectedMenu] = useState("dashboard");
@@ -51,6 +53,12 @@ export default function PatientDashboard() {
   const [showNotifications, setShowNotifications] = useState(false);
   const { toast } = useToast();
   const router = useRouter();
+
+  // Hardcoded userId for demonstration; in real app, get from auth
+  const userId = "test-user-id";
+
+  // State for uploaded file
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
 
   const menuItems = [
     { id: "dashboard", label: "Dashboard", icon: Activity },
@@ -131,12 +139,46 @@ export default function PatientDashboard() {
     setShowBookingModal(false);
   };
 
-  const handleUploadReport = () => {
-    toast({
-      title: "Report Uploaded!",
-      description: "Your medical report has been successfully uploaded.",
-    });
-    setShowUploadModal(false);
+  const handleUploadReport = async () => {
+    if (!selectedFile) {
+      toast({
+        title: "No File Selected",
+        description: "Please select a file to upload.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const formData = new FormData();
+    formData.append("document", selectedFile);
+    formData.append("userId", userId);
+
+    try {
+      const response = await axios.post("http://localhost:5000/profile/docs/add_doc", formData, {
+        headers: {
+          "Content-Type": "multipart/form-data",
+        },
+      });
+      toast({
+        title: "Report Uploaded!",
+        description: "Your medical report has been successfully uploaded.",
+      });
+      setSelectedFile(null);
+      setShowUploadModal(false);
+    } catch (error: any) {
+      console.error("Upload error:", error); // Debug
+      toast({
+        title: "Upload Failed",
+        description: error.response?.data?.docError || "Failed to upload report. Please try again.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      setSelectedFile(e.target.files[0]);
+    }
   };
 
   const handleEmergencyCall = () => {
@@ -515,41 +557,14 @@ export default function PatientDashboard() {
           </DialogHeader>
           <div className="space-y-6">
             <div className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center">
-              <FileText className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+              <Upload className="w-12 h-12 text-gray-400 mx-auto mb-4" />
               <p className="text-lg font-medium text-gray-900 mb-2">
                 Drop files here or click to browse
               </p>
               <p className="text-gray-600 mb-4">
                 Supports PDF, JPG, PNG files up to 10MB
               </p>
-              <Button variant="outline">
-                Choose Files
-              </Button>
-            </div>
-            
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label htmlFor="reportType">Report Type</Label>
-                <Select>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select type" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="lab-test">Lab Test</SelectItem>
-                    <SelectItem value="xray">X-Ray</SelectItem>
-                    <SelectItem value="prescription">Prescription</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <Label htmlFor="date">Date</Label>
-                <Input type="date" />
-              </div>
-            </div>
-            
-            <div>
-              <Label htmlFor="description">Description</Label>
-              <Textarea placeholder="Brief description of the report" />
+              <Input type="file" onChange={handleFileChange} className="mx-auto w-64" />
             </div>
             
             <div className="flex justify-end space-x-3">
@@ -563,6 +578,7 @@ export default function PatientDashboard() {
           </div>
         </DialogContent>
       </Dialog>
+      
       <Dialog open={showEmergencyModal} onOpenChange={setShowEmergencyModal}>
         <DialogContent className="max-w-md">
           <DialogHeader>

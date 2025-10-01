@@ -1,6 +1,7 @@
+
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import {
   FileText,
@@ -25,6 +26,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
+import axios from "axios";
 
 export default function MedicalRecordsPage() {
   const [selectedRecord, setSelectedRecord] = useState<any>(null);
@@ -32,68 +34,14 @@ export default function MedicalRecordsPage() {
   const [filterType, setFilterType] = useState("all");
   const { toast } = useToast();
 
-  const medicalRecords = [
-    {
-      id: 1,
-      name: "Blood Test Report",
-      type: "lab-test",
-      date: "2025-01-10",
-      doctor: "Dr. Sarah Wilson",
-      hospital: "City General Hospital",
-      fileType: "PDF",
-      size: "2.4 MB",
-      tags: ["Blood Work", "Routine"],
-      description: "Complete blood count and lipid profile"
-    },
-    {
-      id: 2,
-      name: "Chest X-Ray",
-      type: "imaging",
-      date: "2025-01-08",
-      doctor: "Dr. Michael Chen",
-      hospital: "Metro Health Center",
-      fileType: "JPG",
-      size: "1.8 MB",
-      tags: ["X-Ray", "Chest"],
-      description: "Chest X-ray for respiratory evaluation"
-    },
-    {
-      id: 3,
-      name: "Prescription - Hypertension",
-      type: "prescription",
-      date: "2025-01-05",
-      doctor: "Dr. Lisa Anderson",
-      hospital: "Heart Care Clinic",
-      fileType: "PDF",
-      size: "0.5 MB",
-      tags: ["Prescription", "Hypertension"],
-      description: "Medication for blood pressure management"
-    },
-    {
-      id: 4,
-      name: "Discharge Summary",
-      type: "discharge",
-      date: "2024-12-28",
-      doctor: "Dr. Robert King",
-      hospital: "City General Hospital",
-      fileType: "PDF",
-      size: "1.2 MB",
-      tags: ["Discharge", "Surgery"],
-      description: "Post-operative discharge summary"
-    },
-    {
-      id: 5,
-      name: "ECG Report",
-      type: "test",
-      date: "2024-12-20",
-      doctor: "Dr. Sarah Wilson",
-      hospital: "City General Hospital",
-      fileType: "PDF",
-      size: "0.8 MB",
-      tags: ["ECG", "Cardiology"],
-      description: "Electrocardiogram test results"
-    }
-  ];
+  // Hardcoded userId for demonstration; in real app, get from auth
+  const userId = "test-user-id";
+
+  // State for uploaded file
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+
+  // State for fetched documents (signed URLs)
+  const [medicalRecords, setMedicalRecords] = useState<any[]>([]);
 
   const recordTypes = [
     { value: "all", label: "All Records" },
@@ -125,16 +73,96 @@ export default function MedicalRecordsPage() {
     }
   };
 
+  // Fetch documents on load
+  useEffect(() => {
+    const fetchDocuments = async () => {
+      try {
+        const response = await axios.post("http://localhost:5000/profile/docs/fetch_doc", { userID: userId });
+        setMedicalRecords(response.data.map((url: string, index: number) => ({
+          id: index + 1,
+          name: "Uploaded Report " + (index + 1),
+          type: "report",
+          date: new Date().toISOString().split('T')[0],
+          doctor: "Self Uploaded",
+          hospital: "N/A",
+          fileType: url.split('.').pop()?.toUpperCase() || "FILE",
+          size: "Unknown",
+          tags: ["Uploaded"],
+          description: "User-uploaded medical report",
+          url: url
+        })));
+      } catch (error) {
+        toast({
+          title: "Failed to Fetch Records",
+          description: "Unable to load medical records. Please try again.",
+          variant: "destructive",
+        });
+      }
+    };
+
+    fetchDocuments();
+  }, []);
+
   const filteredRecords = filterType === "all" 
     ? medicalRecords 
     : medicalRecords.filter(record => record.type === filterType);
 
-  const handleUpload = () => {
-    toast({
-      title: "File Uploaded!",
-      description: "Your medical record has been successfully uploaded.",
-    });
-    setShowUploadModal(false);
+  const handleUpload = async () => {
+    if (!selectedFile) {
+      toast({
+        title: "No File Selected",
+        description: "Please select a file to upload.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const formData = new FormData();
+    formData.append("document", selectedFile);
+    formData.append("userId", userId);
+
+    try {
+      const response = await axios.post("http://localhost:5000/profile/docs/add_doc", formData, {
+        headers: {
+          "Content-Type": "multipart/form-data",
+        },
+      });
+      toast({
+        title: "File Uploaded!",
+        description: "Your medical record has been successfully uploaded.",
+      });
+      setSelectedFile(null);
+      setShowUploadModal(false);
+
+      // Refresh records after upload
+      const fetchResponse = await axios.post("http://localhost:5000/profile/docs/fetch_doc", { userID: userId });
+      setMedicalRecords(fetchResponse.data.map((url: string, index: number) => ({
+        id: index + 1,
+        name: "Uploaded Report " + (index + 1),
+        type: "report",
+        date: new Date().toISOString().split('T')[0],
+        doctor: "Self Uploaded",
+        hospital: "N/A",
+        fileType: url.split('.').pop()?.toUpperCase() || "FILE",
+        size: "Unknown",
+        tags: ["Uploaded"],
+        description: "User-uploaded medical report",
+        url: url
+      })));
+    } catch (error: any) {
+      console.error("Upload error:", error); // Debug
+      toast({
+        title: "Upload Failed",
+        description: error.response?.data?.docError || "Failed to upload report. Please try again.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      setSelectedFile(e.target.files[0]);
+    }
   };
 
   const containerVariants = {
@@ -185,41 +213,7 @@ export default function MedicalRecordsPage() {
                 <p className="text-gray-600 mb-4">
                   Supports PDF, JPG, PNG files up to 10MB
                 </p>
-                <Button variant="outline">
-                  Choose Files
-                </Button>
-              </div>
-              
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <Label htmlFor="recordType">Record Type</Label>
-                  <Select>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select type" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="lab-test">Lab Test</SelectItem>
-                      <SelectItem value="imaging">Imaging</SelectItem>
-                      <SelectItem value="prescription">Prescription</SelectItem>
-                      <SelectItem value="discharge">Discharge Summary</SelectItem>
-                      <SelectItem value="test">Other Test</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <Label htmlFor="date">Date</Label>
-                  <Input type="date" />
-                </div>
-              </div>
-              
-              <div>
-                <Label htmlFor="description">Description</Label>
-                <Input placeholder="Brief description of the record" />
-              </div>
-              
-              <div>
-                <Label htmlFor="tags">Tags (comma separated)</Label>
-                <Input placeholder="e.g., Blood Work, Routine, Cardiology" />
+                <Input type="file" onChange={handleFileChange} className="mx-auto w-64" />
               </div>
               
               <div className="flex justify-end space-x-3">
@@ -278,7 +272,7 @@ export default function MedicalRecordsPage() {
               <CardHeader className="pb-3">
                 <div className="flex items-start justify-between">
                   <div className="flex items-center space-x-3">
-                    {getFileIcon(record.fileType)}
+                    {getFileIcon(record.fileType || "")}
                     <div>
                       <CardTitle className="text-lg">{record.name}</CardTitle>
                       <CardDescription>{record.description}</CardDescription>
