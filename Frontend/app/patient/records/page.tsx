@@ -14,7 +14,7 @@ import {
   X,
   Plus,
   Image,
-  File
+  File as FileIcon
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -24,6 +24,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import axios from "axios";
+import { useRouter } from "next/navigation";
 
 interface MedicalRecord {
   id: number;
@@ -45,12 +46,15 @@ export default function MedicalRecordsPage() {
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [filterType, setFilterType] = useState("all");
   const { toast } = useToast();
+  const router = useRouter();
 
-  // Hardcoded userId for demonstration; in real app, get from auth
-  const userId = "16c751cd-54dd-4603-962e-886d747841a4";
+  // State for user ID and loading
+  const [userId, setUserId] = useState<string | null>(null);
+  const [isClient, setIsClient] = useState(false);
 
   // State for uploaded file
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
 
   // State for fetched documents
   const [medicalRecords, setMedicalRecords] = useState<MedicalRecord[]>([]);
@@ -77,7 +81,7 @@ export default function MedicalRecordsPage() {
 
   const getFileIcon = (fileType: string) => {
     switch (fileType.toLowerCase()) {
-      case "pdf": return <File className="w-8 h-8 text-red-500" />;
+      case "pdf": return <FileIcon className="w-8 h-8 text-red-500" />;
       case "jpg":
       case "jpeg":
       case "png": return <Image className="w-8 h-8 text-green-500" />;
@@ -85,26 +89,68 @@ export default function MedicalRecordsPage() {
     }
   };
 
-  const mapMimeToRecordType = (mimeType: string): string => {
-    if (mimeType.includes("pdf")) return "lab-test";
-    if (mimeType.includes("image")) return "imaging";
-    if (mimeType.includes("text")) return "prescription";
+  const mapMimeToRecordType = (mimeType: string, fileType: string): string => {
+    if (!mimeType || mimeType === "application/octet-stream") {
+      switch (fileType.toLowerCase()) {
+        case "pdf": return "lab-test";
+        case "jpg":
+        case "jpeg":
+        case "png": return "imaging";
+        default: return "test";
+      }
+    }
+    if (mimeType.toLowerCase().includes("pdf")) return "lab-test";
+    if (mimeType.toLowerCase().includes("image")) return "imaging";
+    if (mimeType.toLowerCase().includes("text")) return "prescription";
+    if (mimeType.toLowerCase().includes("application")) return "discharge";
     return "test";
   };
 
-  // Placeholder thumbnail for PDFs
-  const pdfThumbnail = "/pdf-thumbnail.png"; // Replace with your actual placeholder image path
+  // Sanitize filename to avoid invalid characters
+  const sanitizeFilename = (filename: string): string => {
+    return filename.replace(/[^a-zA-Z0-9.-]/g, '_').replace(/\s+/g, '_');
+  };
 
-  // Fetch documents on load
+  // Placeholder thumbnail for PDFs
+  const pdfThumbnail = "https://img.icons8.com/color/200/000000/pdf.png";
+
+  // Initialize userId on client side
   useEffect(() => {
+    setIsClient(true);
+    if (typeof window !== "undefined") {
+      const user = JSON.parse(localStorage.getItem("user") || "{}");
+      setUserId(user.id || null);
+    }
+  }, []);
+
+  // Fetch documents when userId is available
+  useEffect(() => {
+    if (!userId || !isClient) {
+      if (!userId && isClient) {
+        toast({
+          title: "Authentication Required",
+          description: "Please sign in to view your medical records.",
+          variant: "destructive",
+        });
+        router.push("/auth");
+      }
+      return;
+    }
+
     const fetchDocuments = async () => {
       try {
-        const profileResponse = await axios.post("http://localhost:5000/profile/docs/fetch_doc", {
-          userID: userId,
-        });
-        console.log("Profile Response:", profileResponse.data);
+        const response = await axios.post(
+          "http://localhost:5000/profile/docs/fetch_doc",
+          { userID: userId },
+          {
+            headers: {
+              "Content-Type": "application/json",
+            },
+          }
+        );
+        console.log("Fetch Response:", JSON.stringify(response.data, null, 2));
 
-        const docs = profileResponse.data;
+        const docs = Array.isArray(response.data) ? response.data : [];
 
         const records = docs.map((doc: { signedUrl: string; type: string; path: string }, index: number) => {
           const fileType = doc.path?.split('.').pop()?.toUpperCase() || "FILE";
@@ -112,8 +158,8 @@ export default function MedicalRecordsPage() {
 
           return {
             id: index + 1,
-            name: `Uploaded Report ${index + 1}`,
-            type: mapMimeToRecordType(mimeType),
+            name: doc.path?.split('/').pop() || `Uploaded Report ${index + 1}`,
+            type: mapMimeToRecordType(mimeType, fileType),
             date: new Date().toISOString().split('T')[0],
             doctor: "Self Uploaded",
             hospital: "N/A",
@@ -121,7 +167,7 @@ export default function MedicalRecordsPage() {
             size: "Unknown",
             tags: ["Uploaded"],
             description: "User-uploaded medical report",
-            url: doc.signedUrl,
+            url: doc.signedUrl || "",
             mimeType,
           };
         });
@@ -138,7 +184,7 @@ export default function MedicalRecordsPage() {
     };
 
     fetchDocuments();
-  }, [userId, toast]);
+  }, [userId, isClient, toast, router]);
 
   const filteredRecords = filterType === "all"
     ? medicalRecords
@@ -154,16 +200,46 @@ export default function MedicalRecordsPage() {
       return;
     }
 
+    if (!userId || !isClient) {
+      toast({
+        title: "Authentication Required",
+        description: "Please sign in to upload medical records.",
+        variant: "destructive",
+      });
+      router.push("/auth");
+      return;
+    }
+
+    if (selectedFile.size > 10 * 1024 * 1024) {
+      toast({
+        title: "File Too Large",
+        description: "Please select a file smaller than 10MB.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Sanitize filename
+    const sanitizedFile = new File([selectedFile], sanitizeFilename(selectedFile.name), {
+      type: selectedFile.type,
+      lastModified: selectedFile.lastModified,
+    });
+
+    setIsUploading(true);
     const formData = new FormData();
-    formData.append("document", selectedFile);
+    formData.append("document", sanitizedFile);
     formData.append("userId", userId);
 
     try {
+      console.log("Uploading with userId:", userId, "File:", sanitizedFile.name, "Type:", sanitizedFile.type);
+
       const response = await axios.post("http://localhost:5000/profile/docs/add_doc", formData, {
         headers: {
           "Content-Type": "multipart/form-data",
         },
+        timeout: 30000,
       });
+      console.log("Upload Response:", JSON.stringify(response.data, null, 2));
       toast({
         title: "File Uploaded!",
         description: response.data.message || "Your medical record has been successfully uploaded.",
@@ -171,10 +247,18 @@ export default function MedicalRecordsPage() {
       setSelectedFile(null);
       setShowUploadModal(false);
 
-      const profileResponse = await axios.post("http://localhost:5000/profile/docs/fetch_doc", {
-        userID: userId,
-      });
-      const docs = profileResponse.data;
+      // Refresh records
+      const profileResponse = await axios.post(
+        "http://localhost:5000/profile/docs/fetch_doc",
+        { userID: userId },
+        {
+          headers: {
+            "Content-Type": "application/json",
+          },
+        }
+      );
+      console.log("Fetch after upload:", JSON.stringify(profileResponse.data, null, 2));
+      const docs = Array.isArray(profileResponse.data) ? profileResponse.data : [];
 
       const records = docs.map((doc: { signedUrl: string; type: string; path: string }, index: number) => {
         const fileType = doc.path?.split('.').pop()?.toUpperCase() || "FILE";
@@ -182,8 +266,8 @@ export default function MedicalRecordsPage() {
 
         return {
           id: index + 1,
-          name: `Uploaded Report ${index + 1}`,
-          type: mapMimeToRecordType(mimeType),
+          name: doc.path?.split('/').pop() || `Uploaded Report ${index + 1}`,
+          type: mapMimeToRecordType(mimeType, fileType),
           date: new Date().toISOString().split('T')[0],
           doctor: "Self Uploaded",
           hospital: "N/A",
@@ -191,7 +275,7 @@ export default function MedicalRecordsPage() {
           size: "Unknown",
           tags: ["Uploaded"],
           description: "User-uploaded medical report",
-          url: doc.signedUrl,
+          url: doc.signedUrl || "",
           mimeType,
         };
       });
@@ -199,17 +283,44 @@ export default function MedicalRecordsPage() {
       setMedicalRecords(records);
     } catch (error: any) {
       console.error("Upload error:", error);
+      let errorMessage = error.response?.data?.docError || error.message || "Failed to upload report. Please try again.";
+      if (error.code === "ECONNABORTED") {
+        errorMessage = "Upload timed out. Please check your network connection and try again.";
+      } else if (errorMessage.includes("fetch failed")) {
+        errorMessage = "Failed to upload to storage. Ensure the backend server is running and Supabase is configured correctly.";
+      } else if (errorMessage.includes("No file provided")) {
+        errorMessage = "No file was received by the server. Please select a valid file and try again.";
+      }
       toast({
         title: "Upload Failed",
-        description: error.response?.data?.docError || "Failed to upload report. Please try again.",
+        description: errorMessage,
         variant: "destructive",
       });
+    } finally {
+      setIsUploading(false);
     }
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
-      setSelectedFile(e.target.files[0]);
+      const file = e.target.files[0];
+      if (file.size > 10 * 1024 * 1024) {
+        toast({
+          title: "File Too Large",
+          description: "Please select a file smaller than 10MB.",
+          variant: "destructive",
+        });
+        return;
+      }
+      if (!["application/pdf", "image/jpeg", "image/png"].includes(file.type)) {
+        toast({
+          title: "Unsupported File Type",
+          description: "Please select a PDF, JPG, or PNG file.",
+          variant: "destructive",
+        });
+        return;
+      }
+      setSelectedFile(file);
     }
   };
 
@@ -238,43 +349,48 @@ export default function MedicalRecordsPage() {
           <h1 className="text-3xl font-bold text-gray-900">Medical Records</h1>
           <p className="text-gray-600 mt-1">Manage your medical documents and reports</p>
         </div>
-        <Dialog open={showUploadModal} onOpenChange={setShowUploadModal}>
-          <DialogTrigger asChild>
-            <Button className="healthcare-gradient">
-              <Upload className="w-4 h-4 mr-2" />
-              Upload Record
-            </Button>
-          </DialogTrigger>
-          <DialogContent className="max-w-2xl">
-            <DialogHeader>
-              <DialogTitle>Upload Medical Record</DialogTitle>
-              <DialogDescription>
-                Upload your medical documents, reports, or prescriptions
-              </DialogDescription>
-            </DialogHeader>
-            <div className="space-y-6">
-              <div className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center">
-                <Upload className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-                <p className="text-lg font-medium text-gray-900 mb-2">
-                  Drop files here or click to browse
-                </p>
-                <p className="text-gray-600 mb-4">
-                  Supports PDF, JPG, PNG files up to 10MB
-                </p>
-                <Input type="file" onChange={handleFileChange} className="mx-auto w-64" />
+        <div className="flex items-center space-x-3">
+          <Dialog open={showUploadModal} onOpenChange={setShowUploadModal}>
+            <DialogTrigger asChild>
+              <Button className="healthcare-gradient" disabled={!userId || isUploading || !isClient}>
+                <Upload className="w-4 h-4 mr-2" />
+                Upload Record
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="max-w-2xl">
+              <DialogHeader>
+                <DialogTitle>Upload Medical Record</DialogTitle>
+                <DialogDescription>
+                  Upload your medical documents, reports, or prescriptions
+                </DialogDescription>
+              </DialogHeader>
+              <div className="space-y-6">
+                <div className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center">
+                  <Upload className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+                  <p className="text-lg font-medium text-gray-900 mb-2">
+                    Drop files here or click to browse
+                  </p>
+                  <p className="text-gray-600 mb-4">
+                    Supports PDF, JPG, PNG files up to 10MB
+                  </p>
+                  <Input type="file" onChange={handleFileChange} className="mx-auto w-64" disabled={isUploading} />
+                </div>
+                
+                <div className="flex justify-end space-x-3">
+                  <Button variant="outline" onClick={() => setShowUploadModal(false)} disabled={isUploading}>
+                    Cancel
+                  </Button>
+                  <Button onClick={handleUpload} className="healthcare-gradient" disabled={!selectedFile || isUploading}>
+                    {isUploading ? "Uploading..." : "Upload Record"}
+                  </Button>
+                </div>
               </div>
-              
-              <div className="flex justify-end space-x-3">
-                <Button variant="outline" onClick={() => setShowUploadModal(false)}>
-                  Cancel
-                </Button>
-                <Button onClick={handleUpload} className="healthcare-gradient">
-                  Upload Record
-                </Button>
-              </div>
-            </div>
-          </DialogContent>
-        </Dialog>
+            </DialogContent>
+          </Dialog>
+          <Button onClick={() => { if (typeof window !== "undefined") { localStorage.removeItem("user"); localStorage.removeItem("session"); } router.push("/auth"); }} variant="outline">
+            Logout
+          </Button>
+        </div>
       </motion.div>
 
       {/* Filters */}
@@ -327,7 +443,7 @@ export default function MedicalRecordsPage() {
                     </div>
                   </div>
                   <Badge className={getTypeColor(record.type)}>
-                    {record.type.replace('-', ' ')}
+                    {recordTypes.find(t => t.value === record.type)?.label || record.type.replace('-', ' ')}
                   </Badge>
                 </div>
               </CardHeader>
@@ -404,7 +520,7 @@ export default function MedicalRecordsPage() {
                 <span className="font-medium">Date:</span> {selectedRecord?.date}
               </div>
               <div>
-                <span className="font-medium">Type:</span> {selectedRecord?.type}
+                <span className="font-medium">Type:</span> {recordTypes.find(t => t.value === selectedRecord?.type)?.label || selectedRecord?.type}
               </div>
               <div>
                 <span className="font-medium">Doctor:</span> {selectedRecord?.doctor}
