@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState, useEffect } from "react";
@@ -21,27 +20,40 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import axios from "axios";
 
+interface MedicalRecord {
+  id: number;
+  name: string;
+  type: string;
+  date: string;
+  doctor: string;
+  hospital: string;
+  fileType: string;
+  size: string;
+  tags: string[];
+  description: string;
+  url: string;
+  mimeType: string;
+}
+
 export default function MedicalRecordsPage() {
-  const [selectedRecord, setSelectedRecord] = useState<any>(null);
+  const [selectedRecord, setSelectedRecord] = useState<MedicalRecord | null>(null);
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [filterType, setFilterType] = useState("all");
   const { toast } = useToast();
 
   // Hardcoded userId for demonstration; in real app, get from auth
-  const userId = "test-user-id";
+  const userId = "16c751cd-54dd-4603-962e-886d747841a4";
 
   // State for uploaded file
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
 
-  // State for fetched documents (signed URLs)
-  const [medicalRecords, setMedicalRecords] = useState<any[]>([]);
+  // State for fetched documents
+  const [medicalRecords, setMedicalRecords] = useState<MedicalRecord[]>([]);
 
   const recordTypes = [
     { value: "all", label: "All Records" },
@@ -73,38 +85,63 @@ export default function MedicalRecordsPage() {
     }
   };
 
+  const mapMimeToRecordType = (mimeType: string): string => {
+    if (mimeType.includes("pdf")) return "lab-test";
+    if (mimeType.includes("image")) return "imaging";
+    if (mimeType.includes("text")) return "prescription";
+    return "test";
+  };
+
+  // Placeholder thumbnail for PDFs
+  const pdfThumbnail = "/pdf-thumbnail.png"; // Replace with your actual placeholder image path
+
   // Fetch documents on load
   useEffect(() => {
     const fetchDocuments = async () => {
       try {
-        const response = await axios.post("http://localhost:5000/profile/docs/fetch_doc", { userID: userId });
-        setMedicalRecords(response.data.map((url: string, index: number) => ({
-          id: index + 1,
-          name: "Uploaded Report " + (index + 1),
-          type: "report",
-          date: new Date().toISOString().split('T')[0],
-          doctor: "Self Uploaded",
-          hospital: "N/A",
-          fileType: url.split('.').pop()?.toUpperCase() || "FILE",
-          size: "Unknown",
-          tags: ["Uploaded"],
-          description: "User-uploaded medical report",
-          url: url
-        })));
-      } catch (error) {
+        const profileResponse = await axios.post("http://localhost:5000/profile/docs/fetch_doc", {
+          userID: userId,
+        });
+        console.log("Profile Response:", profileResponse.data);
+
+        const docs = profileResponse.data;
+
+        const records = docs.map((doc: { signedUrl: string; type: string; path: string }, index: number) => {
+          const fileType = doc.path?.split('.').pop()?.toUpperCase() || "FILE";
+          const mimeType = doc.type || "application/octet-stream";
+
+          return {
+            id: index + 1,
+            name: `Uploaded Report ${index + 1}`,
+            type: mapMimeToRecordType(mimeType),
+            date: new Date().toISOString().split('T')[0],
+            doctor: "Self Uploaded",
+            hospital: "N/A",
+            fileType,
+            size: "Unknown",
+            tags: ["Uploaded"],
+            description: "User-uploaded medical report",
+            url: doc.signedUrl,
+            mimeType,
+          };
+        });
+
+        setMedicalRecords(records);
+      } catch (error: any) {
+        console.error("Fetch error:", error);
         toast({
           title: "Failed to Fetch Records",
-          description: "Unable to load medical records. Please try again.",
+          description: error.response?.data?.error || "Unable to load medical records. Please try again.",
           variant: "destructive",
         });
       }
     };
 
     fetchDocuments();
-  }, []);
+  }, [userId, toast]);
 
-  const filteredRecords = filterType === "all" 
-    ? medicalRecords 
+  const filteredRecords = filterType === "all"
+    ? medicalRecords
     : medicalRecords.filter(record => record.type === filterType);
 
   const handleUpload = async () => {
@@ -129,28 +166,39 @@ export default function MedicalRecordsPage() {
       });
       toast({
         title: "File Uploaded!",
-        description: "Your medical record has been successfully uploaded.",
+        description: response.data.message || "Your medical record has been successfully uploaded.",
       });
       setSelectedFile(null);
       setShowUploadModal(false);
 
-      // Refresh records after upload
-      const fetchResponse = await axios.post("http://localhost:5000/profile/docs/fetch_doc", { userID: userId });
-      setMedicalRecords(fetchResponse.data.map((url: string, index: number) => ({
-        id: index + 1,
-        name: "Uploaded Report " + (index + 1),
-        type: "report",
-        date: new Date().toISOString().split('T')[0],
-        doctor: "Self Uploaded",
-        hospital: "N/A",
-        fileType: url.split('.').pop()?.toUpperCase() || "FILE",
-        size: "Unknown",
-        tags: ["Uploaded"],
-        description: "User-uploaded medical report",
-        url: url
-      })));
+      const profileResponse = await axios.post("http://localhost:5000/profile/docs/fetch_doc", {
+        userID: userId,
+      });
+      const docs = profileResponse.data;
+
+      const records = docs.map((doc: { signedUrl: string; type: string; path: string }, index: number) => {
+        const fileType = doc.path?.split('.').pop()?.toUpperCase() || "FILE";
+        const mimeType = doc.type || "application/octet-stream";
+
+        return {
+          id: index + 1,
+          name: `Uploaded Report ${index + 1}`,
+          type: mapMimeToRecordType(mimeType),
+          date: new Date().toISOString().split('T')[0],
+          doctor: "Self Uploaded",
+          hospital: "N/A",
+          fileType,
+          size: "Unknown",
+          tags: ["Uploaded"],
+          description: "User-uploaded medical report",
+          url: doc.signedUrl,
+          mimeType,
+        };
+      });
+
+      setMedicalRecords(records);
     } catch (error: any) {
-      console.error("Upload error:", error); // Debug
+      console.error("Upload error:", error);
       toast({
         title: "Upload Failed",
         description: error.response?.data?.docError || "Failed to upload report. Please try again.",
@@ -266,13 +314,13 @@ export default function MedicalRecordsPage() {
         animate="visible"
         className="grid md:grid-cols-2 lg:grid-cols-3 gap-6"
       >
-        {filteredRecords.map((record, index) => (
+        {filteredRecords.map((record) => (
           <motion.div key={record.id} variants={itemVariants}>
             <Card className="hover:shadow-lg transition-shadow cursor-pointer">
               <CardHeader className="pb-3">
                 <div className="flex items-start justify-between">
                   <div className="flex items-center space-x-3">
-                    {getFileIcon(record.fileType || "")}
+                    {getFileIcon(record.fileType)}
                     <div>
                       <CardTitle className="text-lg">{record.name}</CardTitle>
                       <CardDescription>{record.description}</CardDescription>
@@ -315,7 +363,12 @@ export default function MedicalRecordsPage() {
                     <Eye className="w-3 h-3 mr-1" />
                     View
                   </Button>
-                  <Button size="sm" variant="outline" className="flex-1">
+                  <Button 
+                    size="sm" 
+                    variant="outline" 
+                    className="flex-1"
+                    onClick={() => window.open(record.url, "_blank")}
+                  >
                     <Download className="w-3 h-3 mr-1" />
                     Download
                   </Button>
@@ -328,11 +381,15 @@ export default function MedicalRecordsPage() {
 
       {/* Preview Modal */}
       <Dialog open={!!selectedRecord} onOpenChange={() => setSelectedRecord(null)}>
-        <DialogContent className="max-w-4xl max-h-[80vh]">
+        <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center justify-between">
               <span>{selectedRecord?.name}</span>
-              <Button variant="outline" size="sm">
+              <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={() => window.open(selectedRecord?.url, "_blank")}
+              >
                 <Download className="w-4 h-4 mr-2" />
                 Download
               </Button>
@@ -358,13 +415,47 @@ export default function MedicalRecordsPage() {
             </div>
             
             <div className="border rounded-lg p-8 bg-gray-50 text-center">
-              {getFileIcon(selectedRecord?.fileType || "")}
-              <p className="mt-4 text-gray-600">
-                File preview would be displayed here
-              </p>
-              <p className="text-sm text-gray-500 mt-2">
-                {selectedRecord?.fileType} • {selectedRecord?.size}
-              </p>
+              {selectedRecord?.fileType.toLowerCase() === "pdf" ? (
+                <img
+                  src={pdfThumbnail}
+                  alt="PDF Thumbnail"
+                  className="max-w-[200px] h-auto mx-auto cursor-pointer"
+                  onClick={() => window.open(selectedRecord.url, "_blank")}
+                  onError={() => {
+                    toast({
+                      title: "Failed to Load Thumbnail",
+                      description: "Unable to display the PDF thumbnail.",
+                      variant: "destructive",
+                    });
+                  }}
+                />
+              ) : selectedRecord?.fileType.toLowerCase() === "jpg" ||
+                selectedRecord?.fileType.toLowerCase() === "jpeg" ||
+                selectedRecord?.fileType.toLowerCase() === "png" ? (
+                <img
+                  src={selectedRecord.url}
+                  alt={selectedRecord.name}
+                  className="max-w-full h-auto mx-auto cursor-pointer"
+                  onClick={() => window.open(selectedRecord.url, "_blank")}
+                  onError={() => {
+                    toast({
+                      title: "Failed to Load Image",
+                      description: "Unable to display the image file.",
+                      variant: "destructive",
+                    });
+                  }}
+                />
+              ) : (
+                <>
+                  {getFileIcon(selectedRecord?.fileType || "")}
+                  <p className="mt-4 text-gray-600">
+                    File preview not available for this file type
+                  </p>
+                  <p className="text-sm text-gray-500 mt-2">
+                    {selectedRecord?.fileType} • {selectedRecord?.size}
+                  </p>
+                </>
+              )}
             </div>
           </div>
         </DialogContent>
