@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="UTF-8" />
+    <title>File Upload test</title>
+</head>
+
+<body>
+    <input type="file" name="file" id="store">
+    <button onclick="sendFile(event)">Add</button>
+</body>
+
+<script>
+    const sendFile = async (e) => {
+
+        console.log("sending file");
+        const store= document.getElementById("store");
+        const file = store.files[0];
+
+        if (!file) return;
+        else{
+            console.log("File attached!");
+        }
+
+        const formData = new FormData();
+        formData.append("document", file);
+        formData.append("userId", "16c751cd-54dd-4603-962e-886d747841a4");
+
+        // Send POST request
+        const response = await fetch("http://localhost:3000/profile/docs/add_doc", {
+            method: "POST",
+            body: formData, // 👈 automatically sets multipart/form-data
+        });
+
+        const result= await response.json();
+        console.table(result);
+
+    }
+</script>
+
+</html>
