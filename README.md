@@ -101,6 +101,89 @@ git reset    # untrack it if needed
 
 ---
 
+# Git - Viewing and Untracking Files
+
+This document explains how to view all tracked files in Git and how to untrack files or folders safely.
+
+---
+
+## 1. View All Tracked Files
+
+To see all files currently tracked by Git:
+
+```bash
+git ls-files
+```
+
+> This lists all files Git is tracking. Untracked files will not appear.
+
+Alternative, to see tracked and untracked files along with their status:
+
+```bash
+git status
+```
+
+---
+
+## 2. Untrack a Single File
+
+Stop tracking a file without deleting it from your local system:
+
+```bash
+git rm --cached path/to/file
+```
+
+Example:
+
+```bash
+git rm --cached frontend/temp.js
+git commit -m "Untrack temp.js"
+```
+
+---
+
+## 3. Untrack a Folder or Multiple Files
+
+Stop tracking all files inside a folder:
+
+```bash
+git rm -r --cached path/to/folder/
+git commit -m "Stop tracking folder"
+```
+
+Example:
+
+```bash
+git rm -r --cached backend/logs/
+git commit -m "Stop tracking backend logs"
+```
+
+---
+
+## 4. Prevent Git from Tracking in the Future
+
+Add files or folders to `.gitignore` to stop Git from tracking them again:
+
+```
+# Ignore temp files and logs
+frontend/temp.js
+backend/logs/
+```
+
+---
+
+## 5. Verify Untracking
+
+Check that files/folders are no longer tracked:
+
+```bash
+git status
+git ls-files
+```
+
+> Files removed with `--cached` will no longer appear in `git ls-files` but will remain on your local filesystem.
+
+
 ## Notes
 
 * Always inform the group if something goes wrong or you have doubts.
