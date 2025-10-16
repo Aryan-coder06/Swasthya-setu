@@ -1,0 +1,40 @@
+# Python venvs
+.venv/
+venv/
+ENV/
+env/
+
+# Python cache/artifacts
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.pyc
+
+# OS/editor junk
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Local environment & keys
+.env
+*.env.*        # e.g., .env.local, .env.dev
+
+# Logs & temp
+*.log
+logs/
+tmp/
+.cache/
+
+# Bytecode/compiled
+*.so
+*.dll
+
+# Test/coverage
+htmlcov/
+.coverage*
+.pytest_cache/
+
+# Uvicorn reload state (sometimes created)
+.pyre/

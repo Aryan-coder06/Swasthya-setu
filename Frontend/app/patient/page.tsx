@@ -141,20 +141,62 @@ export default function PatientDashboardPage() {
           </Card>
         </motion.div>
 
-        {/* Quick Actions */}
-        <motion.div variants={itemVariants}>
-            <Card>
-                <CardHeader><CardTitle className="flex items-center gap-2"><Plus className="w-5 h-5" />Quick Actions</CardTitle></CardHeader>
-                <CardContent>
-                    <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                        <Button className="h-20 flex-col space-y-2" onClick={() => handleQuickAction("book-appointment")}><Calendar className="w-6 h-6" /><span>Book Appointment</span></Button>
-                        <Button variant="outline" className="h-20 flex-col space-y-2" onClick={() => handleQuickAction("upload-report")}><FileText className="w-6 h-6" /><span>Upload Report</span></Button>
-                        <Button variant="outline" className="h-20 flex-col space-y-2" onClick={() => handleQuickAction("ai-consultation")}><Stethoscope className="w-6 h-6" /><span>AI Consultation</span></Button>
-                        <Button variant="destructive" className="h-20 flex-col space-y-2" onClick={() => handleQuickAction("emergency")}><AlertCircle className="w-6 h-6" /><span>Emergency</span></Button>
-                    </div>
-                </CardContent>
-            </Card>
-        </motion.div>
+       {/* Quick Actions */}
+<motion.div variants={itemVariants}>
+  <Card>
+    <CardHeader>
+      <CardTitle className="flex items-center gap-2">
+        <Plus className="w-5 h-5" />Quick Actions
+      </CardTitle>
+    </CardHeader>
+    <CardContent>
+      <div className="grid grid-cols-5 gap-4">
+        <Button
+          className="h-20 flex-col space-y-2"
+          onClick={() => handleQuickAction("book-appointment")}
+        >
+          <Calendar className="w-6 h-6" />
+          <span>Book Appointment</span>
+        </Button>
+        <Button
+          variant="outline"
+          className="h-20 flex-col space-y-2"
+          onClick={() => handleQuickAction("upload-report")}
+        >
+          <FileText className="w-6 h-6" />
+          <span>Upload Report</span>
+        </Button>
+        <Button
+          variant="outline"
+          className="h-20 flex-col space-y-2"
+          onClick={() => handleQuickAction("ai-consultation")}
+        >
+          <Stethoscope className="w-6 h-6" />
+          <span>AI Consultation</span>
+        </Button>
+        {/* Analyze Prescription button with icon */}
+       <Button
+  variant="outline"
+  className="h-20 flex-col space-y-2"
+  onClick={() => router.push("/patient/analyze-prescription")}
+>
+  <FileText className="w-6 h-6" />
+  <span className="whitespace-nowrap">Analyze Prescription</span>
+</Button>
+
+        <Button
+          variant="destructive"
+          className="h-20 flex-col space-y-2"
+          onClick={() => handleQuickAction("emergency")}
+        >
+          <AlertCircle className="w-6 h-6" />
+          <span>Emergency</span>
+        </Button>
+      </div>
+    </CardContent>
+  </Card>
+</motion.div>
+
 
         {/* Health Metrics & Appointments */}
         <div className="grid lg:grid-cols-2 gap-6">

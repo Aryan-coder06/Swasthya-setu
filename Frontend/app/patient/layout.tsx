@@ -26,16 +26,17 @@ function PatientLayoutUI({ children }: { children: ReactNode }) {
   const notificationRef = useRef<HTMLDivElement>(null);
   const bellRef = useRef<HTMLButtonElement>(null);
 
-  const menuItems = [
-    { id: "dashboard", label: "Dashboard", icon: Activity, route: "/patient" },
-    { id: "appointments", label: "Appointments", icon: Calendar, route: "/patient/appointments" },
-    { id: "records", label: "Medical Records", icon: FileText, route: "/patient/records" },
-    { id: "hospitals", label: "Find Hospitals", icon: MapPin, route: "/patient/hospitals" },
-    { id: "consultations", label: "AI Consultations", icon: Stethoscope, route: "/patient/ai-consultation" },
-    { id: "family", label: "Family Members", icon: Users, route: "/patient/family" },
-    { id: "billing", label: "Billing", icon: CreditCard, route: "/patient/billing" },
-    { id: "emergency", label: "Emergency SOS", icon: AlertCircle, route: "/patient/emergency" }
-  ];
+const menuItems = [
+  { id: "dashboard", label: "Dashboard", icon: Activity, route: "/patient" },
+  { id: "appointments", label: "Appointments", icon: Calendar, route: "/patient/appointments" },
+  { id: "records", label: "Medical Records", icon: FileText, route: "/patient/records" },
+  { id: "hospitals", label: "Find Hospitals", icon: MapPin, route: "/patient/hospitals" },
+  { id: "consultations", label: "AI Consultations", icon: Stethoscope, route: "/patient/ai-consultation" },
+  { id: "family", label: "Family Members", icon: Users, route: "/patient/family" },
+  { id: "billing", label: "Billing", icon: CreditCard, route: "/patient/billing" },
+  { id: "emergency", label: "Emergency SOS", icon: AlertCircle, route: "/patient/emergency" },
+  { id: "analyze-prescription", label: "Analyze Prescription", icon: FileText, route: "/patient/analyze-prescription" } // added here
+];
 
   const bottomMenuItems = [
     { id: "profile", label: "Profile", icon: User, route: "/patient/profile" }
@@ -129,19 +130,58 @@ function PatientLayoutUI({ children }: { children: ReactNode }) {
       )}
 
       <div className="flex">
-        <aside className="w-64 bg-white border-r border-gray-200 h-[calc(100vh-65px)] sticky top-[65px]">
-          <nav className="p-4 h-full flex flex-col justify-between">
-            <div className="space-y-2">
-              {menuItems.map((item) => (<motion.button key={item.id} whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }} onClick={() => handleMenuClick(item.route)} className={`w-full flex items-center space-x-3 px-4 py-3 rounded-lg text-left transition-colors ${selectedMenu === item.id ? "bg-blue-50 text-blue-600 font-semibold" : "text-gray-700 hover:bg-gray-100"}`}><item.icon className="w-5 h-5" /><span>{item.label}</span></motion.button>))}
-            </div>
-            <div>
-              <div className="pt-4 border-t border-gray-200 space-y-2">
-                {bottomMenuItems.map((item) => (<motion.button key={item.id} whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }} onClick={() => handleMenuClick(item.route)} className={`w-full flex items-center space-x-3 px-4 py-3 rounded-lg text-left transition-colors ${selectedMenu === item.id ? "bg-blue-50 text-blue-600 font-semibold" : "text-gray-700 hover:bg-gray-100"}`}><item.icon className="w-5 h-5" /><span>{item.label}</span></motion.button>))}
-                <Link href="/"><button className="w-full flex items-center space-x-3 px-4 py-3 rounded-lg text-left text-gray-700 hover:bg-gray-100"><LogOut className="w-5 h-5" /><span>Logout</span></button></Link>
-              </div>
-            </div>
-          </nav>
-        </aside>
+     <aside className="w-64 bg-white border-r border-gray-200 h-[calc(100vh-65px)] sticky top-[65px]">
+  <nav className="p-4 h-full flex flex-col justify-between">
+    <div className="space-y-2">
+      {menuItems.map((item) => (
+        <motion.button
+          key={item.id}
+          whileHover={{ scale: 1.02 }}
+          whileTap={{ scale: 0.98 }}
+          onClick={() => handleMenuClick(item.route)}
+          className={`w-full flex items-center space-x-3 px-4 py-3 rounded-lg text-left transition-colors ${
+            selectedMenu === item.id
+              ? "bg-blue-50 text-blue-600 font-semibold"
+              : "text-gray-700 hover:bg-gray-100"
+          }`}
+        >
+          <item.icon className="w-5 h-5" />
+          <span>{item.label}</span>
+        </motion.button>
+      ))}
+
+  
+    </div>
+
+    <div>
+      <div className="pt-4 border-t border-gray-200 space-y-2">
+        {bottomMenuItems.map((item) => (
+          <motion.button
+            key={item.id}
+            whileHover={{ scale: 1.02 }}
+            whileTap={{ scale: 0.98 }}
+            onClick={() => handleMenuClick(item.route)}
+            className={`w-full flex items-center space-x-3 px-4 py-3 rounded-lg text-left transition-colors ${
+              selectedMenu === item.id
+                ? "bg-blue-50 text-blue-600 font-semibold"
+                : "text-gray-700 hover:bg-gray-100"
+            }`}
+          >
+            <item.icon className="w-5 h-5" />
+            <span>{item.label}</span>
+          </motion.button>
+        ))}
+        <Link href="/">
+          <button className="w-full flex items-center space-x-3 px-4 py-3 rounded-lg text-left text-gray-700 hover:bg-gray-100">
+            <LogOut className="w-5 h-5" />
+            <span>Logout</span>
+          </button>
+        </Link>
+      </div>
+    </div>
+  </nav>
+</aside>
+
         <main className="flex-1 p-6 bg-gray-50">{children}</main>
       </div>
       <Toaster />

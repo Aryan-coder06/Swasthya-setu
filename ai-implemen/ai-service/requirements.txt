@@ -1,0 +1,16 @@
+# --- API server ---
+fastapi>=0.110,<1.0
+uvicorn[standard]>=0.29,<1.0           # includes httptools, uvloop, watchfiles for reload
+
+# --- Data validation ---
+pydantic>=2.6,<3.0
+starlette>=0.37,<0.39                  # keep compatible with FastAPI
+
+# --- Google Gemini client ---
+google-genai>=0.3.0,<0.4.0
+
+# --- Utilities ---
+python-dotenv>=1.0,<2.0                # .env loading
+pillow>=10.3,<12.0                     # image preprocessing (PIL)
+httpx>=0.27,<0.28                      # HTTP client used by some libs; handy for future
+orjson>=3.9,<4.0                       # fast JSON (optional but nice; FastAPI auto-uses if present)
