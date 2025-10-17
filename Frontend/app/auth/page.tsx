@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import axios from "axios";
@@ -29,6 +30,10 @@ export default function AuthPage() {
   });
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [forgotPasswordOpen, setForgotPasswordOpen] = useState(false);
+  const [forgotPasswordEmail, setForgotPasswordEmail] = useState("");
+  const [forgotPasswordLoading, setForgotPasswordLoading] = useState(false);
+  const [forgotPasswordMessage, setForgotPasswordMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const router = useRouter();
 
   const roles = [
@@ -64,6 +69,31 @@ export default function AuthPage() {
 
   const handleGenderChange = (value: string) => {
     setFormData({ ...formData, gender: value });
+  };
+
+  const handleForgotPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setForgotPasswordLoading(true);
+    setForgotPasswordMessage(null);
+    try {
+      const response = await axios.post('http://localhost:5000/auth/forgot-password', {
+        email: forgotPasswordEmail
+      });
+      setForgotPasswordMessage({ type: "success", text: "Password reset email sent successfully. Please check your inbox." });
+      setTimeout(() => {
+        setForgotPasswordOpen(false);
+        setForgotPasswordEmail("");
+        setForgotPasswordMessage(null);
+      }, 2000);
+    } catch (error: any) {
+      console.error('Forgot password error:', error);
+      setForgotPasswordMessage({
+        type: "error",
+        text: error.response?.data?.error || error.message || "Failed to send password reset email. Please try again."
+      });
+    } finally {
+      setForgotPasswordLoading(false);
+    }
   };
 
   const handleRegister = async (e: React.FormEvent) => {
@@ -126,7 +156,7 @@ export default function AuthPage() {
         email: formData.email,
         password: formData.password,
       };
-      console.log("Sending signin payload:", payload);
+      // console.log("Sending signin payload:", payload);
       const response = await axios.post(`http://localhost:5000/auth/signin/${selectedRole}`, payload, {
         timeout: 30000,
       });
@@ -360,9 +390,47 @@ export default function AuthPage() {
                       <input type="checkbox" className="rounded border-gray-300 text-blue-600 focus:ring-blue-500" />
                       <span className="ml-2 text-sm text-gray-600">Remember me</span>
                     </label>
-                    <Link href="#" className="text-sm text-blue-600 hover:text-blue-500">
-                      Forgot password?
-                    </Link>
+                    <Dialog open={forgotPasswordOpen} onOpenChange={setForgotPasswordOpen}>
+                      <DialogTrigger asChild>
+                        <button type="button" className="text-sm text-blue-600 hover:text-blue-500">
+                          Forgot password?
+                        </button>
+                      </DialogTrigger>
+                      <DialogContent className="sm:max-w-md">
+                        <DialogHeader>
+                          <DialogTitle>Reset Password</DialogTitle>
+                          <DialogDescription>
+                            Enter your email address and we'll send you a link to reset your password.
+                          </DialogDescription>
+                        </DialogHeader>
+                        <form onSubmit={handleForgotPassword} className="space-y-4">
+                          {forgotPasswordMessage && (
+                            <div className={`p-3 text-center rounded ${forgotPasswordMessage.type === "success" ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"}`}>
+                              {forgotPasswordMessage.text}
+                            </div>
+                          )}
+                          <div className="space-y-2">
+                            <Label htmlFor="forgot-email">Email</Label>
+                            <Input
+                              id="forgot-email"
+                              type="email"
+                              placeholder="Enter your email address"
+                              value={forgotPasswordEmail}
+                              onChange={(e) => setForgotPasswordEmail(e.target.value)}
+                              required
+                            />
+                          </div>
+                          <div className="flex justify-end space-x-2">
+                            <Button type="button" variant="outline" onClick={() => setForgotPasswordOpen(false)}>
+                              Cancel
+                            </Button>
+                            <Button type="submit" disabled={forgotPasswordLoading}>
+                              {forgotPasswordLoading ? "Sending..." : "Send Reset Link"}
+                            </Button>
+                          </div>
+                        </form>
+                      </DialogContent>
+                    </Dialog>
                   </div>
                 )}
 
