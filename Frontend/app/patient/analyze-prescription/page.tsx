@@ -2,14 +2,15 @@
 
 "use client";
 
-import React, { useState, useCallback, useMemo } from 'react';
+import React, { useState, useCallback, useRef, useEffect } from 'react';
+import { UploadCloud, X, Loader2, ZoomIn } from 'lucide-react';
+
 // CORRECTED IMPORT PATHS USING ALIAS
 import { analyzePrescription } from '@/lib/api';
 import { AnalysisResponse, PatientReport, PrescriptionData, ReportSection, Medication, RiskColor } from '@/lib/types';
 
 // ===================================================================================
-// UI HELPER COMPONENTS (from your GitHub project's ResultCard.tsx)
-// These are now self-contained within this single file.
+// UI HELPER COMPONENTS (Self-contained within this file)
 // ===================================================================================
 
 const SectionDisplay: React.FC<{ section: ReportSection }> = ({ section }) => {
@@ -116,23 +117,70 @@ const ResultCard: React.FC<{ report: PatientReport }> = ({ report }) => {
   );
 };
 
+// *** FIXED ImagePreviewModal component ***
+const ImagePreviewModal: React.FC<{ isOpen: boolean; src: string | null; onClose: () => void }> = ({ isOpen, src, onClose }) => {
+    if (!isOpen || !src) return null; // Now checks for the 'isOpen' prop
+    return (
+        <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50" onClick={onClose}>
+            <button onClick={onClose} className="absolute top-4 right-4 text-white text-3xl z-50">
+                <X size={32} />
+            </button>
+            <div className="relative p-4">
+                <img src={src} alt="Prescription Preview" className="max-w-screen-lg max-h-[90vh] object-contain" />
+            </div>
+        </div>
+    );
+};
 
 // ===================================================================================
-// MAIN PAGE COMPONENT (using the UI and logic from your GitHub project)
+// MAIN PAGE COMPONENT (Refactored for better UI/UX)
 // ===================================================================================
 
 export default function PrescriptionAnalyzerPage() {
     const [file, setFile] = useState<File | null>(null);
+    const [imagePreviewUrl, setImagePreviewUrl] = useState<string | null>(null);
     const [status, setStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
     const [result, setResult] = useState<AnalysisResponse | null>(null);
+    const [isPreviewModalOpen, setPreviewModalOpen] = useState(false);
+    const fileInputRef = useRef<HTMLInputElement>(null);
 
-    const handleFileChange = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
-        const selectedFile = event.target.files?.[0] || null;
-        setFile(selectedFile);
+    // Cleanup object URL to prevent memory leaks
+    useEffect(() => {
+        return () => {
+            if (imagePreviewUrl) {
+                URL.revokeObjectURL(imagePreviewUrl);
+            }
+        };
+    }, [imagePreviewUrl]);
+
+    const handleFileChange = useCallback((selectedFile: File | null) => {
+        if (imagePreviewUrl) {
+            URL.revokeObjectURL(imagePreviewUrl);
+        }
+        if (selectedFile) {
+            setFile(selectedFile);
+            setImagePreviewUrl(URL.createObjectURL(selectedFile));
+            setResult(null);
+            setStatus('idle');
+        }
+    }, [imagePreviewUrl]);
+    
+    const onFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
+        const file = event.target.files?.[0] || null;
+        handleFileChange(file);
+    };
+
+    const handleRemoveFile = (e: React.MouseEvent) => {
+        e.stopPropagation(); // Prevent triggering the file input
+        setFile(null);
+        setImagePreviewUrl(null);
         setResult(null);
         setStatus('idle');
-    }, []);
-
+        if (fileInputRef.current) {
+            fileInputRef.current.value = ""; // Reset file input
+        }
+    };
+    
     const handleAnalyze = useCallback(async () => {
         if (!file) {
             setStatus('error');
@@ -164,45 +212,76 @@ export default function PrescriptionAnalyzerPage() {
     }, [file]);
 
     return (
-        <div className="bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
+        <div className="bg-gray-50 min-h-screen py-12 px-4 sm:px-6 lg:px-8">
             <div className="max-w-4xl mx-auto">
                 <header className="text-center mb-10">
-                    <h1 className="text-4xl font-extrabold text-gray-900">AI Prescription Analyzer</h1>
-                    <p className="mt-3 text-xl text-gray-500">Upload a prescription image for structured data extraction and a patient-friendly report.</p>
+                    <h1 className="text-4xl font-extrabold text-gray-900 tracking-tight">AI Prescription Analyzer</h1>
+                    <p className="mt-3 text-xl text-gray-500 max-w-2xl mx-auto">Upload an image of your prescription to get a structured summary and helpful insights.</p>
                 </header>
 
-                <div className="bg-white p-8 rounded-xl shadow-lg border border-gray-200">
-                    <div className="flex flex-col space-y-4">
-                        <label className="block text-sm font-medium text-gray-700">Prescription Image (JPG, PNG)</label>
+                <div className="bg-white p-8 rounded-xl shadow-lg border border-gray-200 space-y-6">
+                    <div>
                         <input
                             type="file"
                             accept="image/jpeg,image/png"
-                            onChange={handleFileChange}
-                            className="w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100"
+                            onChange={onFileSelect}
+                            ref={fileInputRef}
+                            className="hidden"
                         />
-                         <button
-                            onClick={handleAnalyze}
-                            disabled={status === 'loading' || !file}
-                            className={`w-full py-3 px-6 rounded-lg text-white font-semibold transition duration-300 shadow-md ${(!file || status === 'loading') ? 'bg-gray-400 cursor-not-allowed' : 'bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-4 focus:ring-indigo-500 focus:ring-opacity-50'}`}
+                        <div
+                            onClick={() => fileInputRef.current?.click()}
+                            className={`relative border-2 border-dashed border-gray-300 rounded-lg p-6 text-center cursor-pointer hover:border-indigo-500 transition-colors duration-300 ${imagePreviewUrl ? 'p-0' : 'py-12'}`}
                         >
-                            {status === 'loading' ? 'Analyzing...' : 'Analyze Prescription'}
-                        </button>
+                            {imagePreviewUrl ? (
+                                <div className="relative group">
+                                    <img src={imagePreviewUrl} alt="Prescription Preview" className="w-full h-auto max-h-80 object-contain rounded-lg" />
+                                    <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-50 transition-all duration-300 flex items-center justify-center rounded-lg">
+                                        <button onClick={(e) => { e.stopPropagation(); setPreviewModalOpen(true); }} className="opacity-0 group-hover:opacity-100 text-white bg-black bg-opacity-50 p-3 rounded-full flex items-center gap-2">
+                                            <ZoomIn size={24}/> View Image
+                                        </button>
+                                    </div>
+                                    <button
+                                        onClick={handleRemoveFile}
+                                        className="absolute -top-3 -right-3 bg-white p-1.5 rounded-full shadow-lg hover:bg-red-100 hover:text-red-600 transition-all"
+                                        aria-label="Remove file"
+                                    >
+                                        <X size={20} />
+                                    </button>
+                                </div>
+                            ) : (
+                                <div className="flex flex-col items-center justify-center text-gray-500">
+                                    <UploadCloud className="w-12 h-12 mb-4 text-gray-400" />
+                                    <p className="text-lg font-semibold text-gray-700">Click to upload or drag and drop</p>
+
+                                    <p className="text-sm">PNG or JPG</p>
+                                </div>
+                            )}
+                        </div>
                     </div>
+                    
+                    <button
+                        onClick={handleAnalyze}
+                        disabled={status === 'loading' || !file}
+                        className={`w-full flex items-center justify-center py-3 px-6 rounded-lg text-white font-semibold transition duration-300 shadow-md ${(!file || status === 'loading') ? 'bg-gray-400 cursor-not-allowed' : 'bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-4 focus:ring-indigo-500 focus:ring-opacity-50'}`}
+                    >
+                        {status === 'loading' && <Loader2 className="mr-2 h-5 w-5 animate-spin" />}
+                        {status === 'loading' ? 'Analyzing...' : 'Analyze Prescription'}
+                    </button>
                 </div>
 
-                {status === 'loading' && <p className="text-center text-blue-500 mt-4">Analyzing prescription with Gemini Vision...</p>}
-
-                {status === 'success' && result?.report && (
-                    <ResultCard report={result.report as PatientReport} />
-                )}
-
-                {status === 'error' && (
-                    <div className="mt-8 p-6 bg-red-100 border-l-4 border-red-500 text-red-700 rounded-lg">
-                        <p className="font-bold">Analysis Error:</p>
-                        <p className="text-sm">{result?.message || 'Please check your backend connection and API key.'}</p>
-                    </div>
-                )}
+                {/* --- RESULT DISPLAY --- */}
+                <div className="mt-8">
+                    {status === 'success' && result?.report && <ResultCard report={result.report as PatientReport} />}
+                    {status === 'error' && (
+                        <div className="p-6 bg-red-50 border-l-4 border-red-500 text-red-800 rounded-lg shadow-md">
+                            <p className="font-bold">Analysis Error</p>
+                            <p className="text-sm">{result?.message || 'Please check your backend connection and API key.'}</p>
+                        </div>
+                    )}
+                </div>
             </div>
+            {/* *** FIXED Modal Call *** */}
+            <ImagePreviewModal isOpen={isPreviewModalOpen} src={imagePreviewUrl} onClose={() => setPreviewModalOpen(false)} />
         </div>
     );
 }
