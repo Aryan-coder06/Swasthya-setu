@@ -1,8 +1,6 @@
-// backend/controllers/patientController.js
 
 import { add_patient_profile, get_patient_profile, update_patient_profile } from "../models/patient.js";
 
-// Controller to add a new patient profile
 const addPatientProfile = async (req, res) => {
     try {
         const { uid, firstName, lastName, email, gender, phone_no, age } = req.body;
@@ -14,7 +12,6 @@ const addPatientProfile = async (req, res) => {
     }
 };
 
-// Controller to get a patient's profile by uid
 const getPatientProfile = async (req, res) => {
     try {
         const { uid } = req.body;
@@ -32,7 +29,6 @@ const getPatientProfile = async (req, res) => {
     }
 };
 
-// Controller to update a patient's profile
 const updatePatientProfile = async (req, res) => {
     try {
         const { uid, updatedData } = req.body;

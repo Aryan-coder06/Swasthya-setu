@@ -116,21 +116,38 @@ export default function AuthPage() {
         timeout: 30000,
       });
       console.log("Signup response:", response.data);
-      setMessage({ type: "success", text: response.data.message });
-      // Store user data for later use
-      localStorage.setItem("user", JSON.stringify(response.data.user));
-      localStorage.setItem("session", JSON.stringify(response.data.session));
-      setTimeout(() => {
-        router.push(roles.find((r) => r.id === selectedRole)!.route);
-      }, 2000);
+      
+      // Check if response contains an error
+      const errorMsg = response.data.error || response.data.reason;
+      if (errorMsg && errorMsg !== "None" && errorMsg !== null) {
+        setMessage({ 
+          type: "error", 
+          text: errorMsg || "Registration failed. Please try again." 
+        });
+        return;
+      }
+      
+      // Only proceed if registration was successful
+      if (response.data.user && response.data.session) {
+        setMessage({ type: "success", text: response.data.message || "Registration successful!" });
+        // Store user data for later use
+        localStorage.setItem("user", JSON.stringify(response.data.user));
+        localStorage.setItem("session", JSON.stringify(response.data.session));
+        setTimeout(() => {
+          router.push(roles.find((r) => r.id === selectedRole)!.route);
+        }, 2000);
+      } else {
+        setMessage({ type: "error", text: "Registration failed. Invalid response from server." });
+      }
     } catch (error: any) {
       console.error("Registration error:", error);
+      const errorText = error.response?.data?.reason || error.response?.data?.error || error.message;
       setMessage({
         type: "error",
         text:
           error.response?.status === 404
             ? "Backend server not found. Ensure the server is running on http://localhost:5000."
-            : error.response?.data?.reason || error.response?.data?.error || error.message || "Registration failed. Please try again.",
+            : (errorText && errorText !== "None" ? errorText : "Registration failed. Please try again."),
       });
     } finally {
       setIsLoading(false);

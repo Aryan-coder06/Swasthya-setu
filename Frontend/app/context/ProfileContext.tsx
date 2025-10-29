@@ -1,6 +1,6 @@
 "use client";
 
-import React, { createContext, useContext, useState, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { useToast } from "@/hooks/use-toast"; // Corrected import path
 
 // Define the shape of the profile data
@@ -46,6 +46,26 @@ export const ProfileProvider = ({ children }: { children: ReactNode }) => {
   const [profileData, setProfileData] = useState<ProfileData>(initialProfileData);
   const [isDirty, setIsDirty] = useState(false);
   const { toast } = useToast();
+
+  // Load user data from localStorage on mount
+  useEffect(() => {
+    const storedUser = localStorage.getItem('user');
+    if (storedUser) {
+      try {
+        const userData = JSON.parse(storedUser);
+        setProfileData(prev => ({
+          ...prev,
+          firstName: userData.firstName || prev.firstName,
+          lastName: userData.lastName || prev.lastName,
+          email: userData.email || prev.email,
+          phone: userData.phone_no || prev.phone,
+          // Add other fields as needed from userData
+        }));
+      } catch (err) {
+        console.error('Failed to parse user data from localStorage:', err);
+      }
+    }
+  }, []);
 
   // Function to update profile data and mark changes as dirty
   const updateProfileData = (updates: Partial<ProfileData>) => {

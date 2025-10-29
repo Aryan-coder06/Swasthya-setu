@@ -39,6 +39,28 @@ export const DoctorProfileProvider = ({ children }: { children: ReactNode }) => 
   const [isDirty, setIsDirty] = useState(false);
   const { toast } = useToast();
 
+  // Load doctor data from localStorage on mount
+  useEffect(() => {
+    const storedUser = localStorage.getItem('user');
+    if (storedUser) {
+      try {
+        const userData = JSON.parse(storedUser);
+        const loadedData = {
+          ...initialProfileData,
+          firstName: userData.firstName || initialProfileData.firstName,
+          lastName: userData.lastName || initialProfileData.lastName,
+          email: userData.email || initialProfileData.email,
+          phone: userData.phone_no || initialProfileData.phone,
+          specialty: userData.spec || userData.specialty || initialProfileData.specialty,
+        };
+        setProfileData(loadedData);
+        setOriginalProfileData(loadedData);
+      } catch (err) {
+        console.error('Failed to parse user data from localStorage:', err);
+      }
+    }
+  }, []);
+
   useEffect(() => {
     setIsDirty(JSON.stringify(profileData) !== JSON.stringify(originalProfileData));
   }, [profileData, originalProfileData]);

@@ -1,43 +1,48 @@
 import express from "express";
 import cors from "cors";
-import { createClient } from '@supabase/supabase-js'
+import { createClient } from '@supabase/supabase-js';
 import dotenv from 'dotenv';
-import multer from "multer"
+import multer from "multer";
 
 dotenv.config();
 
-const app= express();
+const app = express();
 
-import auth from "./routes/auth.js"
-import profile_manager from "./routes/profile.js"
-
+// Middleware
 app.use(cors());
 app.use(express.json());
-const upload= multer();
+app.use(express.urlencoded({ extended: true }));
+const upload = multer();
+
+// Routes
+import auth from "./routes/auth.js";
+import profile_manager from "./routes/profile.js";
+import receptionistRoutes from "./routes/receptionistRoutes.js";
 
 app.use("/profile/docs", profile_manager);
-
-app.use(express.urlencoded({ extended: true }));
-
 app.use("/auth", auth);
+app.use("/receptionist", receptionistRoutes);
+
 app.get("/", (req, res) => {
-    res.send("Hello");
-})
+  res.send("Hello");
+});
 
+// === SUPABASE SETUP ===
+const supabaseUrl = process.env.SUPABASE_URL;
+const supabaseKey = process.env.SUPABASE_ANON_KEY;
 
-const supabaseUrl = process.env.SUPABASE_URL 
-const supabaseKey = process.env.SUPABASE_ANON_KEY 
+if (!supabaseUrl || !supabaseKey) {
+  console.error("Missing SUPABASE_URL or SUPABASE_ANON_KEY in .env");
+  process.exit(1);
+}
 
 const supabase = createClient(supabaseUrl, supabaseKey);
 
-if(supabase){
-    app.listen(process.env.PORT, () =>{
-        console.log(`The backend server is at ${process.env.LOCAL_URL}.`);
-    })
-}
-else{
-    console.log("Error connecting to supabase!");
-}
+// === EXPORT SUPABASE ===
+export default supabase;  // EXPORT HERE
 
-export default supabase;
-
+// === START SERVER ===
+const PORT = process.env.PORT || 5000;
+app.listen(PORT, () => {
+  console.log(`Server running at ${process.env.LOCAL_URL || `http://localhost:${PORT}`}`);
+});

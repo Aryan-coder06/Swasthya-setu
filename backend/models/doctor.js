@@ -2,11 +2,11 @@ import supabase from "../main_server.js";
 
 const add_doctor_profile = async (uid, firstName, lastName, email, gender, spec, age) => {
   const { error: insertError } = await supabase
-    .from("Doctor_Profile")   // <-- match your DB exactly
+    .from("Doctor_Profile")  
     .insert({
       id: uid,
-      firstName,              // matches your column
-      lastName,               // matches your column
+      firstName,              
+      lastName,               
       email,
       specs: spec,            
       gender,

@@ -5,7 +5,6 @@ import { add_doctor_profile } from "../models/doctor.js";
 import { add_receptionist_profile } from "../models/receptionist.js";
 
 const signupPatient = async (req, res) => {
-  //This is to check if everything is still working!
   try {
     const {
       email,
@@ -21,6 +20,7 @@ const signupPatient = async (req, res) => {
 
     const { data, error } = await supabase.auth.signUp({ email, password });
     if (error) {
+      console.log(error);
       return res.json({
         status: error.status,
         code: error.code,
@@ -336,13 +336,10 @@ const resetPassword = async (req, res) => {
       return res.status(400).json({ error: "Access token and new password are required" });
     }
 
-    // Prefer to pass both tokens
     if (access_token && refresh_token) {
       await supabase.auth.setSession({ access_token, refresh_token });
     } else {
-      // if you only have access_token, use setAuth or create a client with Authorization header
-      // (see notes below)
-      await supabase.auth.setSession({ access_token }); // may work in some client versions
+      await supabase.auth.setSession({ access_token }); 
     }
 
     const { data, error } = await supabase.auth.updateUser({ password: new_password });
