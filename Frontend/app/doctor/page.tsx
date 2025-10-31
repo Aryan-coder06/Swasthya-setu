@@ -1,55 +1,168 @@
 "use client";
 
+import { useEffect, useMemo, useState } from "react";
 import { motion } from "framer-motion";
-import {
-  Calendar, Users, Video, ClipboardList
-} from "lucide-react";
+import { Calendar, Users, ClipboardList, TrendingUp } from "lucide-react";
+import axios from "axios";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Skeleton } from "@/components/ui/skeleton";
+import { useToast } from "@/hooks/use-toast";
 import { useDoctorProfile } from "../context/DoctorProfileContext";
+
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
+
+interface DashboardResponse {
+  profile: {
+    id: string;
+    firstName: string;
+    lastName: string;
+  };
+  stats: {
+    totalAppointments: number;
+    recentAppointments: number;
+    totalUniquePatients: number;
+  };
+  todayAppointments: Array<{
+    id: number;
+    patientName: string;
+    appointmentTime: string | null;
+    status: string;
+    meetingLink: string | null;
+  }>;
+  recentPatients: Array<{
+    id: string | null;
+    name: string;
+    lastVisit: string | null;
+    status: string;
+  }>;
+}
+
+const getStatusColor = (status: string) => {
+  switch (status) {
+    case "confirmed":
+      return "bg-green-100 text-green-800";
+    case "in-progress":
+      return "bg-blue-100 text-blue-800";
+    case "completed":
+      return "bg-slate-200 text-slate-800";
+    case "cancelled":
+      return "bg-red-100 text-red-700";
+    default:
+      return "bg-gray-100 text-gray-800";
+  }
+};
 
 export default function DoctorDashboardPage() {
   const { profileData } = useDoctorProfile();
+  const { toast } = useToast();
 
-  const todayAppointments = [
-    { id: 1, patient: "Emma Johnson", time: "09:00 AM", status: "confirmed", condition: "Hypertension", avatar: "EJ" },
-    { id: 2, patient: "Michael Smith", time: "10:30 AM", status: "in-progress", condition: "Diabetes", avatar: "MS" },
-  ];
+  const [dashboard, setDashboard] = useState<DashboardResponse | null>(null);
+  const [loading, setLoading] = useState(false);
 
-  const recentPatients = [
-    { id: 1, name: "Alice Cooper", lastVisit: "2 days ago", condition: "Migraine", status: "stable", avatar: "AC" },
-    { id: 2, name: "Robert King", lastVisit: "1 week ago", condition: "Heart Disease", status: "critical", avatar: "RK" },
-  ];
+  useEffect(() => {
+    if (!profileData.id) return;
 
-  const stats = [
-    { title: "Today's Appointments", value: "12", change: "+2 from yesterday", icon: Calendar, color: "text-blue-600", bg: "bg-blue-100" },
-    { title: "Total Patients", value: "248", change: "+15 this month", icon: Users, color: "text-green-600", bg: "bg-green-100" },
-  ];
+    const loadDashboard = async () => {
+      try {
+        setLoading(true);
+        const response = await axios.get<DashboardResponse>(
+          `${API_URL}/api/doctor/${profileData.id}/dashboard`,
+          { params: { t: Date.now() } }
+        );
+        setDashboard(response.data);
+      } catch (error: any) {
+        console.error("Failed to load doctor dashboard:", error);
+        toast({
+          title: "Unable to load dashboard",
+          description: error.response?.data?.error || "Please try again shortly.",
+          variant: "destructive",
+        });
+      } finally {
+        setLoading(false);
+      }
+    };
 
-  const containerVariants = { hidden: { opacity: 0 }, visible: { opacity: 1, transition: { staggerChildren: 0.1 } } };
-  const itemVariants = { hidden: { y: 20, opacity: 0 }, visible: { y: 0, opacity: 1 } };
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case "confirmed": return "bg-green-100 text-green-800";
-      case "in-progress": return "bg-blue-100 text-blue-800";
-      default: return "bg-gray-100 text-gray-800";
-    }
+    loadDashboard();
+  }, [profileData.id, toast]);
+
+  const statsCards = useMemo(() => {
+    const stats = dashboard?.stats;
+    return [
+      {
+        title: "Today's Appointments",
+        value: dashboard?.todayAppointments?.length ?? 0,
+        caption: "Scheduled for today",
+        icon: Calendar,
+        color: "text-blue-600",
+        bg: "bg-blue-100",
+      },
+      {
+        title: "Total Patients",
+        value: stats?.totalUniquePatients ?? 0,
+        caption: "Across your history",
+        icon: Users,
+        color: "text-green-600",
+        bg: "bg-green-100",
+      },
+      {
+        title: "30-day Appointments",
+        value: stats?.recentAppointments ?? 0,
+        caption: "Last 30 days",
+        icon: TrendingUp,
+        color: "text-purple-600",
+        bg: "bg-purple-100",
+      },
+      {
+        title: "All Time Visits",
+        value: stats?.totalAppointments ?? 0,
+        caption: "Recorded in system",
+        icon: ClipboardList,
+        color: "text-amber-600",
+        bg: "bg-amber-100",
+      },
+    ];
+  }, [dashboard]);
+
+  const containerVariants = {
+    hidden: { opacity: 0 },
+    visible: {
+      opacity: 1,
+      transition: { staggerChildren: 0.1 },
+    },
+  };
+  const itemVariants = {
+    hidden: { y: 20, opacity: 0 },
+    visible: { y: 0, opacity: 1 },
   };
 
   return (
-    <motion.div variants={containerVariants} initial="hidden" animate="visible" className="space-y-6">
+    <motion.div
+      variants={containerVariants}
+      initial="hidden"
+      animate="visible"
+      className="space-y-6"
+    >
       <motion.div variants={itemVariants}>
         <Card className="bg-gradient-to-r from-green-500 to-blue-500 text-white">
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
               <div>
-                <h2 className="text-2xl font-bold mb-2">Good Morning, Dr. {profileData.firstName}!</h2>
-                <p className="text-green-100">You have 12 appointments scheduled for today.</p>
+                <h2 className="text-2xl font-bold mb-2">
+                  {`Good ${new Date().getHours() < 12 ? "Morning" : "Day"}, Dr. ${profileData.firstName}!`}
+                </h2>
+                <p className="text-green-100">
+                  {dashboard?.todayAppointments?.length
+                    ? `You have ${dashboard.todayAppointments.length} appointments scheduled for today.`
+                    : "No appointments scheduled for today yet."}
+                </p>
               </div>
               <div className="text-right">
-                <div className="text-3xl font-bold">248</div>
+                <div className="text-3xl font-bold">
+                  {dashboard?.stats?.totalUniquePatients ?? "--"}
+                </div>
                 <div className="text-sm text-green-100">Total Patients</div>
               </div>
             </div>
@@ -58,16 +171,24 @@ export default function DoctorDashboardPage() {
       </motion.div>
 
       <motion.div variants={itemVariants}>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {stats.map((stat, index) => (
-            <motion.div key={index} whileHover={{ scale: 1.02 }} className="bg-white p-6 rounded-lg border border-gray-200 hover:shadow-lg transition-shadow">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+          {statsCards.map((stat, index) => (
+            <motion.div
+              key={stat.title}
+              whileHover={{ scale: 1.02 }}
+              className="bg-white p-6 rounded-lg border border-gray-200 hover:shadow-lg transition-shadow"
+            >
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm text-gray-600">{stat.title}</p>
-                  <p className="text-2xl font-bold text-gray-900">{stat.value}</p>
-                  <p className="text-sm text-gray-500 mt-1">{stat.change}</p>
+                  <p className="text-2xl font-bold text-gray-900">
+                    {loading ? <Skeleton className="h-6 w-16" /> : stat.value}
+                  </p>
+                  <p className="text-sm text-gray-500 mt-1">{stat.caption}</p>
                 </div>
-                <div className={`p-3 rounded-full ${stat.bg}`}><stat.icon className={`w-6 h-6 ${stat.color}`} /></div>
+                <div className={`p-3 rounded-full ${stat.bg}`}>
+                  <stat.icon className={`w-6 h-6 ${stat.color}`} />
+                </div>
               </div>
             </motion.div>
           ))}
@@ -77,21 +198,122 @@ export default function DoctorDashboardPage() {
       <div className="grid lg:grid-cols-2 gap-6">
         <motion.div variants={itemVariants}>
           <Card>
-            <CardHeader><div className="flex items-center justify-between"><CardTitle className="flex items-center gap-2"><Calendar className="w-5 h-5" />Today's Schedule</CardTitle><Button variant="outline" size="sm">View All</Button></div></CardHeader>
-            <CardContent><div className="space-y-4">{todayAppointments.map((appointment) => (<motion.div key={appointment.id} whileHover={{ scale: 1.02 }} className="flex items-center justify-between p-4 border rounded-lg hover:shadow-md transition-shadow"><div className="flex items-center space-x-3"><Avatar><AvatarFallback className="bg-blue-100 text-blue-600">{appointment.avatar}</AvatarFallback></Avatar><div><div className="font-medium">{appointment.patient}</div><div className="text-sm text-gray-600">{appointment.condition}</div></div></div><div className="text-right space-y-1"><div className="font-medium text-sm">{appointment.time}</div><Badge className={getStatusColor(appointment.status)}>{appointment.status}</Badge></div></motion.div>))}</div></CardContent>
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <CardTitle className="flex items-center gap-2">
+                  <Calendar className="w-5 h-5" />Today&apos;s Schedule
+                </CardTitle>
+                <Button variant="outline" size="sm">
+                  View All
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {loading ? (
+                <div className="space-y-3">
+                  {Array.from({ length: 3 }).map((_, idx) => (
+                    <Skeleton key={idx} className="h-16 w-full" />
+                  ))}
+                </div>
+              ) : dashboard?.todayAppointments?.length ? (
+                <div className="space-y-4">
+                  {dashboard.todayAppointments.map((appointment) => (
+                    <motion.div
+                      key={appointment.id}
+                      whileHover={{ scale: 1.02 }}
+                      className="flex items-center justify-between p-4 border rounded-lg hover:shadow-md transition-shadow"
+                    >
+                      <div className="flex items-center space-x-3">
+                        <Avatar>
+                          <AvatarFallback className="bg-blue-100 text-blue-600">
+                            {appointment.patientName
+                              .split(" ")
+                              .map((part) => part[0])
+                              .join("")
+                              .slice(0, 2)}
+                          </AvatarFallback>
+                        </Avatar>
+                        <div>
+                          <div className="font-medium">{appointment.patientName}</div>
+                          <div className="text-sm text-gray-600">
+                            {appointment.meetingLink ? "Video Consultation" : "In-person"}
+                          </div>
+                        </div>
+                      </div>
+                      <div className="text-right space-y-1">
+                        <div className="font-medium text-sm">
+                          {appointment.appointmentTime || "TBD"}
+                        </div>
+                        <Badge className={getStatusColor(appointment.status)}>
+                          {appointment.status}
+                        </Badge>
+                      </div>
+                    </motion.div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-center text-gray-500 py-8">
+                  No appointments scheduled for today.
+                </p>
+              )}
+            </CardContent>
           </Card>
         </motion.div>
 
         <motion.div variants={itemVariants}>
           <Card>
-            <CardHeader><CardTitle className="flex items-center gap-2"><Users className="w-5 h-5" />Recent Patients</CardTitle></CardHeader>
-            <CardContent><div className="space-y-4">{recentPatients.map((patient) => (<div key={patient.id} className="flex items-center justify-between p-4 border rounded-lg"><div className="flex items-center space-x-3"><Avatar><AvatarFallback className="bg-green-100 text-green-600">{patient.avatar}</AvatarFallback></Avatar><div><div className="font-medium">{patient.name}</div><div className="text-sm text-gray-600">{patient.condition}</div></div></div><div className="text-right space-y-1"><div className="text-sm text-gray-600">{patient.lastVisit}</div><Badge className={patient.status === "critical" ? "bg-red-100 text-red-800" : "bg-green-100 text-green-800"}>{patient.status}</Badge></div></div>))}
-            <Button variant="outline" className="w-full mt-4">View All Patients</Button></div></CardContent>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Users className="w-5 h-5" />Recent Patients
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {loading ? (
+                <div className="space-y-3">
+                  {Array.from({ length: 3 }).map((_, idx) => (
+                    <Skeleton key={idx} className="h-16 w-full" />
+                  ))}
+                </div>
+              ) : dashboard?.recentPatients?.length ? (
+                <div className="space-y-4">
+                  {dashboard.recentPatients.map((patient, index) => (
+                    <div
+                      key={`${patient.id ?? patient.name}-${index}`}
+                      className="flex items-center justify-between p-4 border rounded-lg"
+                    >
+                      <div className="flex items-center space-x-3">
+                        <Avatar>
+                          <AvatarFallback className="bg-green-100 text-green-600">
+                            {patient.name
+                              .split(" ")
+                              .map((part) => part[0])
+                              .join("")
+                              .slice(0, 2)}
+                          </AvatarFallback>
+                        </Avatar>
+                        <div>
+                          <div className="font-medium">{patient.name}</div>
+                          <div className="text-sm text-gray-600">
+                            Last visit: {patient.lastVisit || "N/A"}
+                          </div>
+                        </div>
+                      </div>
+                      <Badge className={getStatusColor(patient.status)}> {patient.status} </Badge>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-center text-gray-500 py-8">
+                  No recent patients recorded.
+                </p>
+              )}
+              <Button variant="outline" className="w-full mt-4">
+                View All Patients
+              </Button>
+            </CardContent>
           </Card>
         </motion.div>
       </div>
     </motion.div>
   );
 }
-
-

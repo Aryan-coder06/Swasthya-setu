@@ -7,7 +7,7 @@ pydantic>=2.6,<3.0
 starlette>=0.37,<0.39                  # keep compatible with FastAPI
 
 # --- Google Gemini client ---
-google-genai>=0.3.0,<0.4.0
+google-generativeai>=0.3.0,<0.4.0
 
 # --- Utilities ---
 python-dotenv>=1.0,<2.0                # .env loading

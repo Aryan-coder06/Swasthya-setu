@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { motion } from "framer-motion";
 import {
   FileText,
@@ -12,7 +12,8 @@ import {
   Image as ImageIcon,
   File as FileIcon,
   Loader2,
-  Inbox
+  Inbox,
+  Sparkles
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -24,10 +25,16 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { useToast } from "@/hooks/use-toast";
 import axios from "axios";
 import { useRouter } from "next/navigation";
+import type { PatientReport } from "@/lib/types";
+
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
+
+type RecordSource = "upload" | "ai";
 
 // Interface for a medical record object
 interface MedicalRecord {
-  id: number;
+  id: string;
+  source: RecordSource;
   name: string;
   type: string;
   date: string;
@@ -39,6 +46,9 @@ interface MedicalRecord {
   description: string;
   url: string;
   mimeType: string;
+  aiReport?: PatientReport | null;
+  aiImageUrl?: string | null;
+  createdAt?: string | null;
 }
 
 export default function MedicalRecordsPage() {
@@ -65,11 +75,14 @@ export default function MedicalRecordsPage() {
   const [uploadRecordDescription, setUploadRecordDescription] = useState("");
   const [uploadRecordTags, setUploadRecordTags] = useState("");
 
+  const isAiSelected = selectedRecord?.source === "ai" && selectedRecord.aiReport;
+
   const recordTypes = [
     { value: "all", label: "All Records" },
     { value: "lab-test", label: "Lab Tests" },
     { value: "imaging", label: "Imaging" },
     { value: "prescription", label: "Prescriptions" },
+    { value: "ai-prescription", label: "AI Prescriptions" },
     { value: "discharge", label: "Discharge Summaries" },
     { value: "test", label: "Other Tests" }
   ];
@@ -80,6 +93,7 @@ export default function MedicalRecordsPage() {
       case "lab-test": return "bg-blue-100 text-blue-800 border-blue-200";
       case "imaging": return "bg-green-100 text-green-800 border-green-200";
       case "prescription": return "bg-purple-100 text-purple-800 border-purple-200";
+      case "ai-prescription": return "bg-indigo-100 text-indigo-800 border-indigo-200";
       case "discharge": return "bg-orange-100 text-orange-800 border-orange-200";
       case "test": return "bg-pink-100 text-pink-800 border-pink-200";
       default: return "bg-gray-100 text-gray-800 border-gray-200";
@@ -89,6 +103,8 @@ export default function MedicalRecordsPage() {
   // Helper function to get the correct icon based on file type
   const getFileIcon = (fileType: string) => {
     switch (fileType?.toLowerCase()) {
+      case "ai":
+        return <Sparkles className="w-8 h-8 text-indigo-500" />;
       case "pdf": return <FileIcon className="w-8 h-8 text-red-500" />;
       case "jpg":
       case "jpeg":
@@ -114,6 +130,24 @@ export default function MedicalRecordsPage() {
     if (mimeType.toLowerCase().includes("application")) return "discharge";
     return "test";
   };
+
+  const aiRiskStyles: Record<string, { border: string; dot: string; title: string }> = {
+    red: {
+      border: "border-red-200 bg-red-50",
+      dot: "bg-red-500",
+      title: "text-red-700",
+    },
+    yellow: {
+      border: "border-amber-200 bg-amber-50",
+      dot: "bg-amber-500",
+      title: "text-amber-700",
+    },
+    green: {
+      border: "border-emerald-200 bg-emerald-50",
+      dot: "bg-emerald-500",
+      title: "text-emerald-700",
+    },
+  };
   
   const sanitizeFilename = (filename: string): string => {
     return filename.replace(/[^a-zA-Z0-9.-]/g, '_').replace(/\s+/g, '_');
@@ -138,35 +172,96 @@ export default function MedicalRecordsPage() {
   }, [router, toast]);
   
   // Reusable function to fetch medical documents
-  const fetchDocuments = useCallback(async () => {
+  const fetchRecords = useCallback(async () => {
     if (!userId) return;
     setIsLoading(true);
     try {
-      const response = await axios.post(
-        "http://localhost:5000/profile/docs/fetch_doc",
-        { userID: userId },
-        { headers: { "Content-Type": "application/json" } }
-      );
-      const docs = Array.isArray(response.data) ? response.data : [];
-      const records: MedicalRecord[] = docs.map((doc: { signedUrl: string; type: string; path: string }, index: number) => {
-        const fileType = doc.path?.split('.').pop()?.toUpperCase() || "FILE";
+      const [docsResponse, aiResponse] = await Promise.all([
+        axios.post(
+          `${API_BASE}/profile/docs/fetch_doc`,
+          { userID: userId },
+          { headers: { "Content-Type": "application/json" } }
+        ),
+        axios
+          .post(
+            `${API_BASE}/patient/prescriptions/list`,
+            { patientId: userId },
+            { headers: { "Content-Type": "application/json" } }
+          )
+          .catch((error) => {
+            console.error("AI report fetch error:", error);
+            return { data: { data: [] } };
+          }),
+      ]);
+
+      const docs = Array.isArray(docsResponse.data) ? docsResponse.data : [];
+      const docRecords: MedicalRecord[] = docs.map((doc: any, index: number) => {
+        const fileType = doc.path?.split(".").pop()?.toUpperCase() || "FILE";
         const mimeType = doc.type || "application/octet-stream";
+        const createdAt = doc.created_at || new Date().toISOString();
         return {
-          id: index + 1,
-          name: doc.path?.split('/').pop() || `Uploaded Report ${index + 1}`,
+          id: `upload-${doc.path || index}`,
+          source: "upload",
+          name: doc.path?.split("/").pop() || `Uploaded Report ${index + 1}`,
           type: mapMimeToRecordType(mimeType, fileType),
-          date: new Date().toISOString().split('T')[0], // Using current date as placeholder
+          date: createdAt.split("T")[0],
           doctor: "Self Uploaded",
           hospital: "N/A",
           fileType,
-          size: "Unknown",
+          size: doc.size ? `${(doc.size / 1024 / 1024).toFixed(1)} MB` : "Unknown",
           tags: ["Uploaded"],
           description: "User-uploaded medical report",
           url: doc.signedUrl || "",
           mimeType,
+          createdAt,
         };
       });
-      setMedicalRecords(records);
+
+      const aiData = Array.isArray(aiResponse?.data?.data) ? aiResponse.data.data : [];
+      const aiRecords: MedicalRecord[] = aiData.map((entry: any) => {
+        const parsedReport: PatientReport | null = (() => {
+          if (!entry?.report) return null;
+          if (typeof entry.report === "string") {
+            try {
+              return JSON.parse(entry.report);
+            } catch (error) {
+              console.warn("Failed to parse report JSON", error);
+              return null;
+            }
+          }
+          return entry.report;
+        })();
+
+        const header = parsedReport?.summary_header || entry.summary_header || "AI Prescription Summary";
+        const issued = entry.date_issued || parsedReport?.date_issued || entry.created_at;
+
+        return {
+          id: `ai-${entry.id}`,
+          source: "ai",
+          name: header,
+          type: "ai-prescription",
+          date: (issued || new Date().toISOString()).split("T")[0],
+          doctor: entry.doctor_name || parsedReport?.doctor_name || "AI Assisted",
+          hospital: "Prescription Analyzer",
+          fileType: "AI",
+          size: "—",
+          tags: ["AI Summary", "Prescription"],
+          description: "AI-generated prescription analysis",
+          url: entry.image_url || "",
+          mimeType: "application/json",
+          aiReport: parsedReport,
+          aiImageUrl: entry.image_url || null,
+          createdAt: entry.created_at || null,
+        };
+      });
+
+      const combined = [...docRecords, ...aiRecords].sort((a, b) => {
+        const aDate = new Date(a.createdAt || a.date).getTime();
+        const bDate = new Date(b.createdAt || b.date).getTime();
+        return bDate - aDate;
+      });
+
+      setMedicalRecords(combined);
     } catch (error: any) {
       console.error("Fetch error:", error);
       toast({
@@ -182,24 +277,31 @@ export default function MedicalRecordsPage() {
   // Effect to fetch documents when userId is available
   useEffect(() => {
     if (userId && isClient) {
-      fetchDocuments();
+      fetchRecords();
     }
-  }, [userId, isClient, fetchDocuments]);
+  }, [userId, isClient, fetchRecords]);
 
   // Filter and search logic
-  const filteredRecords = medicalRecords
-    .filter(record => filterType === "all" || record.type === filterType)
-    .filter(record => {
-      if (!searchTerm) return true;
-      const lowercasedTerm = searchTerm.toLowerCase();
-      return (
-        record.name.toLowerCase().includes(lowercasedTerm) ||
-        record.description.toLowerCase().includes(lowercasedTerm) ||
-        record.doctor.toLowerCase().includes(lowercasedTerm) ||
-        record.hospital.toLowerCase().includes(lowercasedTerm) ||
-        record.tags.some(tag => tag.toLowerCase().includes(lowercasedTerm))
-      );
-    });
+  const filteredRecords = useMemo(() => {
+    return medicalRecords
+      .filter(record => {
+        if (filterType === "all") return true;
+        if (record.type === filterType) return true;
+        if (filterType === "prescription" && record.type === "ai-prescription") return true;
+        return false;
+      })
+      .filter(record => {
+        if (!searchTerm) return true;
+        const lowercasedTerm = searchTerm.toLowerCase();
+        return (
+          record.name.toLowerCase().includes(lowercasedTerm) ||
+          record.description.toLowerCase().includes(lowercasedTerm) ||
+          record.doctor.toLowerCase().includes(lowercasedTerm) ||
+          record.hospital.toLowerCase().includes(lowercasedTerm) ||
+          record.tags.some(tag => tag.toLowerCase().includes(lowercasedTerm))
+        );
+      });
+  }, [medicalRecords, filterType, searchTerm]);
 
   // Reset upload form state
   const resetUploadForm = () => {
@@ -238,7 +340,7 @@ export default function MedicalRecordsPage() {
     formData.append("tags", uploadRecordTags);
 
     try {
-      const response = await axios.post("http://localhost:5000/profile/docs/add_doc", formData, {
+      const response = await axios.post(`${API_BASE}/profile/docs/add_doc`, formData, {
         headers: { "Content-Type": "multipart/form-data" },
         timeout: 30000,
       });
@@ -248,7 +350,7 @@ export default function MedicalRecordsPage() {
         description: response.data.message || "Your record has been successfully uploaded.",
       });
 
-      await fetchDocuments(); // Refetch documents to show the new one
+      await fetchRecords(); // Refetch documents to show the new one
       setShowUploadModal(false);
       resetUploadForm();
     } catch (error: any) {
@@ -330,9 +432,24 @@ export default function MedicalRecordsPage() {
                   <span className="flex items-center"><Calendar className="w-4 h-4 mr-1.5" />{record.date}</span>
                   <span>{record.size}</span>
                 </div>
-                <div className="flex-grow">
-                  <p className="text-sm text-gray-600 mb-1">Doctor: {record.doctor}</p>
+                <div className="flex-grow space-y-2">
+                  <p className="text-sm text-gray-600">Doctor: {record.doctor}</p>
                   <p className="text-sm text-gray-600">Hospital: {record.hospital}</p>
+                  {record.source === "ai" && record.aiReport && (
+                    <div className="mt-2 space-y-1">
+                      {record.aiReport.report_sections?.slice(0, 2).map((section, idx) => (
+                        <div
+                          key={`${record.id}-sec-${idx}`}
+                          className="rounded-md border border-indigo-100 bg-indigo-50/70 px-3 py-2 text-xs"
+                        >
+                          <p className="font-semibold text-indigo-700">{section.title}</p>
+                          <p className="text-indigo-900/80">
+                            {section.items?.[0] || "AI summary available"}
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
                 <div className="flex flex-wrap gap-1">
                   {record.tags.map((tag, tagIndex) => (
@@ -343,11 +460,17 @@ export default function MedicalRecordsPage() {
                   <Button size="sm" variant="outline" className="flex-1" onClick={() => setSelectedRecord(record)}>
                     <Eye className="w-3 h-3 mr-2" />View
                   </Button>
-                  <Button size="sm" variant="outline" className="flex-1" asChild>
-                    <a href={record.url} target="_blank" rel="noopener noreferrer">
+                  {record.url ? (
+                    <Button size="sm" variant="outline" className="flex-1" asChild>
+                      <a href={record.url} target="_blank" rel="noopener noreferrer">
+                        <Download className="w-3 h-3 mr-2" />Download
+                      </a>
+                    </Button>
+                  ) : (
+                    <Button size="sm" variant="outline" className="flex-1" disabled>
                       <Download className="w-3 h-3 mr-2" />Download
-                    </a>
-                  </Button>
+                    </Button>
+                  )}
                 </div>
               </CardContent>
             </Card>
@@ -474,11 +597,17 @@ export default function MedicalRecordsPage() {
           <DialogHeader>
             <DialogTitle className="flex items-center justify-between">
               <span className="truncate pr-4">{selectedRecord?.name}</span>
-              <Button variant="outline" size="sm" asChild>
-                <a href={selectedRecord?.url} target="_blank" rel="noopener noreferrer">
-                    <Download className="w-4 h-4 mr-2" />Download
-                </a>
-              </Button>
+              {selectedRecord?.url ? (
+                <Button variant="outline" size="sm" asChild>
+                  <a href={selectedRecord?.url} target="_blank" rel="noopener noreferrer">
+                      <Download className="w-4 h-4 mr-2" />Download
+                  </a>
+                </Button>
+              ) : (
+                <Button variant="outline" size="sm" disabled>
+                  <Download className="w-4 h-4 mr-2" />Download
+                </Button>
+              )}
             </DialogTitle>
             <DialogDescription>{selectedRecord?.description}</DialogDescription>
           </DialogHeader>
@@ -489,21 +618,82 @@ export default function MedicalRecordsPage() {
               <div><span className="font-medium text-gray-800">Doctor:</span> {selectedRecord?.doctor}</div>
               <div><span className="font-medium text-gray-800">Hospital:</span> {selectedRecord?.hospital}</div>
             </div>
-            <div className="border rounded-lg p-4 bg-gray-50 flex justify-center items-center min-h-[400px]">
-              {selectedRecord?.fileType.toLowerCase() === "pdf" ? (
-                  <img src={pdfThumbnail} alt="PDF Thumbnail" className="max-w-[150px] h-auto cursor-pointer" onClick={() => window.open(selectedRecord.url, "_blank")} />
-              ) : ["jpg", "jpeg", "png"].includes(selectedRecord?.fileType.toLowerCase() || "") ? (
-                  <img src={selectedRecord?.url} alt={selectedRecord?.name} className="max-w-full max-h-[60vh] h-auto cursor-pointer" onClick={() => window.open(selectedRecord?.url, "_blank")} />
-              ) : (
-                <div className="text-center">
-                  <div className="w-16 h-16 mx-auto flex items-center justify-center">
-                    {getFileIcon(selectedRecord?.fileType || "")}
-                  </div>
-                  <p className="mt-4 text-gray-600">No preview available for this file type.</p>
-                  <p className="text-sm text-gray-500 mt-2">{selectedRecord?.fileType} • {selectedRecord?.size}</p>
+            {isAiSelected && selectedRecord?.aiReport ? (
+              <div className="space-y-6">
+                <div className="space-y-3">
+                  {selectedRecord.aiReport.report_sections?.map((section, idx) => {
+                    const style = aiRiskStyles[section.color] || aiRiskStyles.green;
+                    return (
+                      <div
+                        key={`${selectedRecord.id}-section-${idx}`}
+                        className={`rounded-lg border ${style.border} p-4`}
+                      >
+                        <div className="flex items-center gap-2">
+                          <span className={`h-2 w-2 rounded-full ${style.dot}`} />
+                          <p className={`font-semibold ${style.title}`}>{section.title}</p>
+                        </div>
+                        <ul className="mt-2 space-y-1 text-sm text-gray-700">
+                          {(section.items || []).map((item, itemIdx) => (
+                            <li key={`${selectedRecord.id}-section-${idx}-item-${itemIdx}`}>{item}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    );
+                  })}
                 </div>
-              )}
-            </div>
+                {selectedRecord.aiReport.raw_extracted_data && (
+                  <div className="rounded-lg border bg-gray-50 p-4">
+                    <h3 className="text-sm font-semibold text-gray-800 mb-2">Extracted Prescription Details</h3>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm text-gray-700">
+                      <p><span className="font-medium">Patient:</span> {selectedRecord.aiReport.raw_extracted_data.patient_name || "Unknown"}</p>
+                      <p><span className="font-medium">Doctor:</span> {selectedRecord.aiReport.raw_extracted_data.doctor_name || selectedRecord.doctor}</p>
+                      <p><span className="font-medium">Hospital:</span> {selectedRecord.aiReport.raw_extracted_data.hospital_name || "—"}</p>
+                      <p><span className="font-medium">Issued On:</span> {selectedRecord.aiReport.raw_extracted_data.date_issued || selectedRecord.date}</p>
+                    </div>
+                    {selectedRecord.aiReport.raw_extracted_data.medications && selectedRecord.aiReport.raw_extracted_data.medications.length > 0 && (
+                      <div className="mt-3 space-y-2">
+                        <p className="text-sm font-semibold text-gray-800">Medications</p>
+                        <ul className="space-y-1 text-sm text-gray-700">
+                          {selectedRecord.aiReport.raw_extracted_data.medications.map((med, medIdx) => (
+                            <li key={`${selectedRecord.id}-med-${medIdx}`}>
+                              <span className="font-medium">{med.name}</span>
+                              {med.dosage && ` • ${med.dosage}`}
+                              {med.frequency && ` • ${med.frequency}`}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                  </div>
+                )}
+                {selectedRecord.aiImageUrl && (
+                  <div className="border rounded-lg bg-gray-50 p-4">
+                    <p className="text-sm font-medium text-gray-700 mb-2">Original Prescription Image</p>
+                    <img
+                      src={selectedRecord.aiImageUrl}
+                      alt="Prescription"
+                      className="max-h-[60vh] w-full rounded-md object-contain"
+                    />
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="border rounded-lg p-4 bg-gray-50 flex justify-center items-center min-h-[400px]">
+                {selectedRecord?.fileType?.toLowerCase() === "pdf" ? (
+                    <img src={pdfThumbnail} alt="PDF Thumbnail" className="max-w-[150px] h-auto cursor-pointer" onClick={() => window.open(selectedRecord.url, "_blank")} />
+                ) : ["jpg", "jpeg", "png"].includes(selectedRecord?.fileType?.toLowerCase() || "") ? (
+                    <img src={selectedRecord?.url} alt={selectedRecord?.name} className="max-w-full max-h-[60vh] h-auto cursor-pointer" onClick={() => window.open(selectedRecord?.url, "_blank")} />
+                ) : (
+                  <div className="text-center">
+                    <div className="w-16 h-16 mx-auto flex items-center justify-center">
+                      {getFileIcon(selectedRecord?.fileType || "")}
+                    </div>
+                    <p className="mt-4 text-gray-600">No preview available for this file type.</p>
+                    <p className="text-sm text-gray-500 mt-2">{selectedRecord?.fileType} • {selectedRecord?.size}</p>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </DialogContent>
       </Dialog>

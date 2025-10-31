@@ -1,12 +1,12 @@
 // File Location: SWAS/Frontend/lib/api.ts
 
-import type { AnalysisResponse } from "./types";
+import type { AnalysisResponse, SavePrescriptionPayload, SavePrescriptionResponse } from "./types";
 
-// This URL points to your Python AI service, which you are running on port 8001
-const API_BASE_URL = "http://localhost:8001";
+const AI_BASE_URL = process.env.NEXT_PUBLIC_AI_SERVICE_URL || "http://localhost:8000";
+const BACKEND_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
 
 export async function analyzePrescription(base64Image: string): Promise<AnalysisResponse> {
-  const res = await fetch(`${API_BASE_URL}/analyze`, {
+  const res = await fetch(`${AI_BASE_URL}/analyze`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ base64_image: base64Image }),
@@ -29,4 +29,39 @@ export async function analyzePrescription(base64Image: string): Promise<Analysis
   }
 
   return payload as AnalysisResponse;
+}
+
+export async function savePrescriptionReport(
+  payload: SavePrescriptionPayload
+): Promise<SavePrescriptionResponse> {
+  const formData = new FormData();
+  formData.append("patientId", payload.patientId);
+  formData.append("report", JSON.stringify(payload.report));
+  if (payload.file) {
+    formData.append("file", payload.file, payload.file.name);
+  }
+
+  const res = await fetch(`${BACKEND_BASE_URL}/patient/prescriptions/save`, {
+    method: "POST",
+    body: formData,
+  });
+
+  let json: any = null;
+  try {
+    json = await res.json();
+  } catch (error) {
+    console.error("Failed to parse save report response", error);
+  }
+
+  if (!res.ok) {
+    const message = json?.error || json?.message || "Unable to save prescription report.";
+    return { success: false, message };
+  }
+
+  return {
+    success: true,
+    message: json?.message || "Prescription report saved successfully.",
+    recordId: json?.data?.id ?? json?.id ?? undefined,
+    imageUrl: json?.data?.image_url ?? json?.image_url ?? null,
+  };
 }

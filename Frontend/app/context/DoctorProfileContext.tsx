@@ -1,9 +1,12 @@
 "use client";
 
-import { createContext, useState, useContext, ReactNode, useEffect } from "react";
+import { createContext, useState, useContext, ReactNode, useEffect, useCallback } from "react";
 import { useToast } from "@/hooks/use-toast";
 
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
+
 interface DoctorProfileState {
+  id: string | null;
   firstName: string;
   lastName: string;
   specialty: string;
@@ -11,19 +14,22 @@ interface DoctorProfileState {
   phone: string;
   bio: string;
   profilePic: string;
+  gender?: string | null;
+  age?: number | null;
 }
 
 interface DoctorProfileContextType {
   profileData: DoctorProfileState;
   updateProfile: (field: keyof DoctorProfileState, value: string) => void;
   isDirty: boolean;
-  saveProfile: () => void;
+  saveProfile: () => Promise<void>;
   setProfileData: (data: DoctorProfileState) => void;
 }
 
 const DoctorProfileContext = createContext<DoctorProfileContextType | undefined>(undefined);
 
 const initialProfileData: DoctorProfileState = {
+  id: null,
   firstName: "Sarah",
   lastName: "Wilson",
   specialty: "Cardiologist",
@@ -31,51 +37,137 @@ const initialProfileData: DoctorProfileState = {
   phone: "+91 98765 43210",
   bio: "Dr. Sarah Wilson is a renowned cardiologist with over 15 years of experience in treating cardiovascular diseases. She is dedicated to providing the best care for her patients.",
   profilePic: "https://placehold.co/200x200/E2E8F0/4A5568?text=SW",
+  gender: null,
+  age: null,
 };
 
 export const DoctorProfileProvider = ({ children }: { children: ReactNode }) => {
-  const [profileData, setProfileData] = useState<DoctorProfileState>(initialProfileData);
+  const [profileData, setProfileDataState] = useState<DoctorProfileState>(initialProfileData);
   const [originalProfileData, setOriginalProfileData] = useState<DoctorProfileState>(initialProfileData);
   const [isDirty, setIsDirty] = useState(false);
   const { toast } = useToast();
 
-  // Load doctor data from localStorage on mount
+  const fetchProfile = useCallback(async (doctorId: string) => {
+    try {
+      const response = await fetch(`${API_URL}/api/doctor/profile/${doctorId}`, {
+        cache: "no-store",
+      });
+      if (!response.ok) {
+        throw new Error("Failed to load doctor profile");
+      }
+      const payload = await response.json();
+      const mergedProfile: DoctorProfileState = {
+        ...initialProfileData,
+        ...payload,
+        id: doctorId,
+        profilePic: initialProfileData.profilePic,
+      };
+      setProfileDataState(mergedProfile);
+      setOriginalProfileData(mergedProfile);
+    } catch (error) {
+      console.error("Unable to fetch doctor profile:", error);
+      toast({
+        title: "Profile Unavailable",
+        description: "We could not load your latest profile details. Showing cached data instead.",
+        variant: "destructive",
+      });
+    }
+  }, [toast]);
+
   useEffect(() => {
-    const storedUser = localStorage.getItem('user');
+    const storedUser = typeof window !== "undefined" ? localStorage.getItem("user") : null;
     if (storedUser) {
       try {
         const userData = JSON.parse(storedUser);
-        const loadedData = {
+        const baseProfile: DoctorProfileState = {
           ...initialProfileData,
+          id: userData.id || null,
           firstName: userData.firstName || initialProfileData.firstName,
           lastName: userData.lastName || initialProfileData.lastName,
           email: userData.email || initialProfileData.email,
           phone: userData.phone_no || initialProfileData.phone,
           specialty: userData.spec || userData.specialty || initialProfileData.specialty,
         };
-        setProfileData(loadedData);
-        setOriginalProfileData(loadedData);
+        setProfileDataState(baseProfile);
+        setOriginalProfileData(baseProfile);
+
+        if (userData.id) {
+          fetchProfile(userData.id);
+        }
       } catch (err) {
-        console.error('Failed to parse user data from localStorage:', err);
+        console.error("Failed to parse user data from localStorage:", err);
       }
     }
-  }, []);
+  }, [fetchProfile]);
 
   useEffect(() => {
     setIsDirty(JSON.stringify(profileData) !== JSON.stringify(originalProfileData));
   }, [profileData, originalProfileData]);
 
   const updateProfile = (field: keyof DoctorProfileState, value: string) => {
-    setProfileData(prev => ({ ...prev, [field]: value }));
+    setProfileDataState((prev) => ({ ...prev, [field]: value }));
   };
 
-  const saveProfile = () => {
-    setOriginalProfileData(profileData);
-    setIsDirty(false);
-    toast({
-      title: "Profile Saved!",
-      description: "Your information has been successfully updated.",
-    });
+  const saveProfile = async () => {
+    if (!profileData.id) {
+      toast({
+        title: "Unable to save",
+        description: "Missing doctor identifier. Try signing in again.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const payload = {
+      firstName: profileData.firstName,
+      lastName: profileData.lastName,
+      email: profileData.email,
+      specialty: profileData.specialty,
+      phone: profileData.phone,
+      bio: profileData.bio,
+    };
+
+    try {
+      const response = await fetch(`${API_URL}/api/doctor/profile/${profileData.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+
+      if (!response.ok) {
+        const errorBody = await response.json().catch(() => ({}));
+        throw new Error(errorBody.error || "Failed to save profile");
+      }
+
+      const updated = await response.json();
+      const merged: DoctorProfileState = {
+        ...profileData,
+        ...updated,
+        id: profileData.id,
+        profilePic: profileData.profilePic,
+      };
+
+      setProfileDataState(merged);
+      setOriginalProfileData(merged);
+      setIsDirty(false);
+
+      toast({
+        title: "Profile Updated",
+        description: "Your information has been saved successfully.",
+      });
+    } catch (error: any) {
+      console.error("Save profile error:", error);
+      toast({
+        title: "Save Failed",
+        description: error.message || "Unable to save profile changes.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const setProfileData = (data: DoctorProfileState) => {
+    setProfileDataState(data);
+    setOriginalProfileData(data);
   };
 
   return (

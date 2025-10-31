@@ -44,3 +44,16 @@ export type AnalysisResponse = {
     message: string;
     report: PatientReport | null;
 };
+
+export type SavePrescriptionPayload = {
+    patientId: string;
+    report: PatientReport;
+    file: File;
+};
+
+export type SavePrescriptionResponse = {
+    success: boolean;
+    message: string;
+    recordId?: string;
+    imageUrl?: string | null;
+};

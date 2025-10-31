@@ -26,6 +26,7 @@ Thumbs.db
 logs/
 tmp/
 .cache/
+*.ve
 
 # Bytecode/compiled
 *.so
