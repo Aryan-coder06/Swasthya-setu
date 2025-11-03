@@ -7,8 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useDoctorProfile } from "@/app/context/DoctorProfileContext";
 import { Skeleton } from "@/components/ui/skeleton";
 import axios from "axios";
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
+import { apiRoute } from "@/config/env";
 
 interface DoctorStats {
   totalAppointments: number;
@@ -28,7 +27,7 @@ export default function DoctorAnalyticsPage() {
 
       try {
         setLoading(true);
-        const response = await axios.get(`${API_URL}/api/doctor/analytics/stats/${profileData.id}`);
+        const response = await axios.get(apiRoute(`/api/doctor/analytics/stats/${profileData.id}`));
         setStats(response.data);
         setError(null);
       } catch (err) {
@@ -107,4 +106,3 @@ export default function DoctorAnalyticsPage() {
     </motion.div>
   );
 }
-

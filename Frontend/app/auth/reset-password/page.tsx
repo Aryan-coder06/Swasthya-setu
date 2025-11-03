@@ -10,6 +10,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import axios from "axios";
+import { apiRoute } from "@/config/env";
 
 export default function ResetPasswordPage() {
   const [showPassword, setShowPassword] = useState(false);
@@ -70,7 +71,7 @@ export default function ResetPasswordPage() {
 
     setIsLoading(true);
     try {
-      const response = await axios.post('http://localhost:5000/auth/reset-password', {
+      const response = await axios.post(apiRoute("/auth/reset-password"), {
         ...hashParams, // Send all hash parameters (access_token, refresh_token, etc.)
         new_password: formData.newPassword
       });
@@ -129,7 +130,7 @@ export default function ResetPasswordPage() {
             <CardHeader>
               <CardTitle>Create New Password</CardTitle>
               <CardDescription>
-                Enter your new password below. Make sure it's secure and easy to remember.
+                Enter your new password below. Make sure it&apos;s secure and easy to remember.
               </CardDescription>
             </CardHeader>
 

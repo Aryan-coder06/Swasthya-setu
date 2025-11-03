@@ -10,6 +10,7 @@ import {
   forgotPassword,
   resetPassword,
 } from "../controllers/authControllers.js";
+import { listHospitalsDirectory } from "../controllers/hospitalController.js";
 
 const router = express.Router();
 
@@ -23,5 +24,6 @@ router.post("/signin/receptionist", signinReceptionist);
 
 router.post("/forgot-password", forgotPassword);
 router.post("/reset-password", resetPassword);
+router.get("/hospitals", listHospitalsDirectory);
 
 export default router;

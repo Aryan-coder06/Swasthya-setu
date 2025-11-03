@@ -1,5 +1,10 @@
 import supabase from "../main_server.js";
 import { register_patient } from "./receptionist_models.js";
+import {
+  computeAppointmentWindow,
+  DEFAULT_DURATION_MINUTES,
+  windowsOverlap,
+} from "../utils/appointmentTime.js";
 
 const STORAGE_BUCKET = "User_Docs";
 
@@ -92,13 +97,39 @@ const getDoctorAnalytics = async (doctorId) => {
   };
 };
 
-const getDoctorAppointments = async (doctorId) => {
-  const result = await supabase
+const ACTIVE_APPOINTMENT_STATUSES = ["confirmed", "pending", "in-progress"];
+
+const autoCompleteExpiredAppointments = async (doctorId) => {
+  const nowIso = new Date().toISOString();
+  const { error } = await supabase
+    .from("appointments")
+    .update({ status: "completed" })
+    .eq("doctor_id", doctorId)
+    .in("status", ACTIVE_APPOINTMENT_STATUSES)
+    .not("end_at", "is", null)
+    .lte("end_at", nowIso);
+
+  if (error) {
+    console.error("autoCompleteExpiredAppointments error:", error);
+  }
+};
+
+const getDoctorAppointments = async (doctorId, options = {}) => {
+  await autoCompleteExpiredAppointments(doctorId);
+
+  let query = supabase
     .from("appointments")
     .select("*")
     .eq("doctor_id", doctorId)
+    .order("start_at", { ascending: true })
     .order("appointment_date", { ascending: true })
     .order("appointment_time", { ascending: true });
+
+  if (options.date) {
+    query = query.eq("appointment_date", options.date);
+  }
+
+  const result = await query;
 
   return {
     data: result.data || [],
@@ -107,19 +138,75 @@ const getDoctorAppointments = async (doctorId) => {
 };
 
 const createDoctorAppointment = async (doctorId, payload) => {
+  const {
+    patientId = null,
+    patientName = null,
+    appointmentDate,
+    appointmentTime,
+    status = "confirmed",
+    mode = "in-person",
+    durationMinutes = DEFAULT_DURATION_MINUTES,
+  } = payload;
+
+  const { startIso, endIso } = computeAppointmentWindow({
+    appointmentDate,
+    appointmentTime,
+    durationMinutes,
+  });
+
+  if (!startIso || !endIso) {
+    return {
+      data: null,
+      error: { message: "Invalid appointment date or time supplied." },
+    };
+  }
+
+  const newWindow = { start: startIso, end: endIso };
+
+  const { data: sameDayAppointments, error: sameDayError } = await supabase
+    .from("appointments")
+    .select("id, start_at, end_at, status")
+    .eq("doctor_id", doctorId)
+    .eq("appointment_date", appointmentDate)
+    .in("status", ACTIVE_APPOINTMENT_STATUSES);
+
+  if (sameDayError) {
+    return { data: null, error: sameDayError };
+  }
+
+  if (
+    Array.isArray(sameDayAppointments) &&
+    sameDayAppointments.some((appointment) => {
+      if (!appointment.start_at || !appointment.end_at) return false;
+      return windowsOverlap(newWindow, {
+        start: appointment.start_at,
+        end: appointment.end_at,
+      });
+    })
+  ) {
+    return {
+      data: null,
+      error: { message: "Selected slot is no longer available. Please choose another time." },
+    };
+  }
+
   const insertBody = {
     doctor_id: doctorId,
-    patient_name: payload.patientName || null,
-    appointment_date: payload.appointmentDate,
-    appointment_time: payload.appointmentTime,
-    status: payload.status || "confirmed",
+    patient_id: patientId,
+    patient_name: patientName,
+    appointment_date: appointmentDate,
+    appointment_time: appointmentTime,
+    start_at: startIso,
+    end_at: endIso,
+    duration_minutes: durationMinutes,
+    status,
     created_at: new Date().toISOString(),
   };
 
   const { data, error } = await supabase.from("appointments").insert([insertBody]).select().single();
   if (error) return { data: null, error };
 
-  if (payload.mode === "video") {
+  if (mode === "video") {
     const meetingLink = generateMeetingLink(data.id);
     const saveResult = await saveMeetingLink(data.id, meetingLink);
     if (!saveResult.error) {
@@ -135,6 +222,18 @@ const updateDoctorAppointmentStatus = async (appointmentId, updates) => {
 
   if (updates.status !== undefined) allowed.status = updates.status;
   if (updates.meeting_link !== undefined) allowed.meeting_link = updates.meeting_link;
+  if (updates.appointment_date || updates.appointment_time || updates.duration_minutes) {
+    const computed = computeAppointmentWindow({
+      appointmentDate: updates.appointment_date,
+      appointmentTime: updates.appointment_time,
+      durationMinutes: updates.duration_minutes || DEFAULT_DURATION_MINUTES,
+    });
+    if (computed.startIso && computed.endIso) {
+      allowed.start_at = computed.startIso;
+      allowed.end_at = computed.endIso;
+      allowed.duration_minutes = updates.duration_minutes || DEFAULT_DURATION_MINUTES;
+    }
+  }
 
   if (Object.keys(allowed).length === 0) {
     return { data: null, error: null };
@@ -352,6 +451,21 @@ const getDoctorConsultations = async (doctorId) => {
   return { data: consultations, error: null };
 };
 
+const listDoctorsDirectory = async ({ hospitalId } = {}) => {
+  let query = supabase
+    .from("Doctor_Profile")
+    .select("id, firstName, lastName, email, specs, hospital_id, hospital_name")
+    .order("firstName", { ascending: true })
+    .order("lastName", { ascending: true });
+
+  if (hospitalId) {
+    query = query.eq("hospital_id", hospitalId);
+  }
+
+  const { data, error } = await query;
+  return { data, error };
+};
+
 const savePrescription = async (prescriptionData) => {
   const { data, error } = await supabase.from("prescriptions").insert([prescriptionData]).select();
   return { data, error };
@@ -394,6 +508,7 @@ export {
   getDoctorPatients,
   getDoctorRecords,
   getDoctorConsultations,
+  listDoctorsDirectory,
   addPatientForDoctor,
   savePrescription,
   getPrescriptionById,

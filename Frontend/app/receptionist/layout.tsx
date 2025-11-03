@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, ReactNode } from "react";
+import { useState, useEffect, ReactNode, useMemo } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import Link from "next/link";
 import { motion } from "framer-motion";
@@ -18,16 +18,20 @@ export default function ReceptionistLayout({ children }: { children: ReactNode }
   const router = useRouter();
   const pathname = usePathname();
   const [selectedMenu, setSelectedMenu] = useState("dashboard");
+  const [isCollapsed, setIsCollapsed] = useState(true);
 
-  const menuItems = [
-    { id: "dashboard", label: "Dashboard", icon: Activity, route: "/receptionist" },
-    { id: "appointments", label: "Appointments", icon: Calendar, route: "/receptionist/appointments" },
-    { id: "patients", label: "Patient Management", icon: Users, route: "/receptionist/patients" },
-    { id: "walkin", label: "Walk-in Tickets", icon: Plus, route: "/receptionist/walkin" },
-    { id: "billing", label: "Billing & Payments", icon: CreditCard, route: "/receptionist/billing" },
-    { id: "beds", label: "Bed Management", icon: Bed, route: "/receptionist/beds" },
-    { id: "reports", label: "Reports", icon: FileText, route: "/receptionist/reports" }
-  ];
+  const menuItems = useMemo(
+    () => [
+      { id: "dashboard", label: "Dashboard", icon: Activity, route: "/receptionist" },
+      { id: "appointments", label: "Appointments", icon: Calendar, route: "/receptionist/appointments" },
+      { id: "patients", label: "Patient Management", icon: Users, route: "/receptionist/patients" },
+      { id: "walkin", label: "Walk-in Tickets", icon: Plus, route: "/receptionist/walkin" },
+      { id: "billing", label: "Billing & Payments", icon: CreditCard, route: "/receptionist/billing" },
+      { id: "beds", label: "Bed Management", icon: Bed, route: "/receptionist/beds" },
+      { id: "reports", label: "Reports", icon: FileText, route: "/receptionist/reports" }
+    ],
+    []
+  );
 
   useEffect(() => {
     if (pathname === '/receptionist') {
@@ -72,20 +76,83 @@ export default function ReceptionistLayout({ children }: { children: ReactNode }
       </header>
 
       <div className="flex">
-        <aside className="w-64 bg-white border-r border-gray-200 h-[calc(100vh-65px)] sticky top-[65px]">
-          <nav className="p-4 h-full flex flex-col justify-between">
-            <div className="space-y-2">
-              {menuItems.map((item) => (
-                <motion.button key={item.id} whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }} onClick={() => handleMenuClick(item.route)} className={`w-full flex items-center space-x-3 px-4 py-3 rounded-lg text-left transition-colors ${selectedMenu === item.id ? "bg-purple-50 text-purple-600 font-semibold" : "text-gray-700 hover:bg-gray-100"}`}>
-                  <item.icon className="w-5 h-5" /><span>{item.label}</span>
-                </motion.button>
-              ))}
-            </div>
-            <div>
-              <div className="pt-4 border-t border-gray-200 space-y-2">
-                <button className="w-full flex items-center space-x-3 px-4 py-3 rounded-lg text-left text-gray-700 hover:bg-gray-100"><Settings className="w-5 h-5" /><span>Settings</span></button>
-                <Link href="/"><button className="w-full flex items-center space-x-3 px-4 py-3 rounded-lg text-left text-gray-700 hover:bg-gray-100"><LogOut className="w-5 h-5" /><span>Logout</span></button></Link>
+        <aside
+          className={`hidden md:block bg-white border-r border-gray-200 h-[calc(100vh-65px)] sticky top-[65px] transition-all duration-300 ease-out ${
+            isCollapsed ? "w-20" : "w-64"
+          }`}
+          onMouseEnter={() => setIsCollapsed(false)}
+          onMouseLeave={() => setIsCollapsed(true)}
+        >
+          <nav className="flex h-full flex-col justify-between px-4 py-6">
+            <div className="space-y-3">
+              <div
+                className={`flex items-center rounded-2xl border border-purple-100/70 bg-purple-50/70 px-3 py-3 text-sm font-semibold text-purple-700 shadow-inner transition-all ${
+                  isCollapsed ? "justify-center px-0" : "gap-3"
+                }`}
+              >
+                <div className="rounded-xl bg-gradient-to-br from-purple-500 to-emerald-500 p-2 text-white shadow-md shadow-purple-500/30">
+                  <Heart className="h-4 w-4" />
+                </div>
+                {!isCollapsed && (
+                  <div className="leading-tight">
+                    <p className="text-xs uppercase tracking-wide text-purple-600/80">
+                      Reception desk
+                    </p>
+                    <p className="text-sm font-semibold text-purple-700">
+                      Flow at a glance
+                    </p>
+                  </div>
+                )}
               </div>
+
+              <div className="space-y-1">
+                {menuItems.map((item) => {
+                  const isActive = selectedMenu === item.id;
+                  return (
+                    <motion.button
+                      key={item.id}
+                      whileHover={{ scale: 1.01 }}
+                      whileTap={{ scale: 0.99 }}
+                      onClick={() => handleMenuClick(item.route)}
+                      className={`group flex w-full items-center rounded-xl px-3 py-2 text-left transition-all ${
+                        isCollapsed ? "justify-center" : "gap-3"
+                      } ${
+                        isActive
+                          ? "bg-purple-50 text-purple-600 font-semibold shadow-sm shadow-purple-500/20"
+                          : "text-gray-700 hover:bg-gray-100"
+                      }`}
+                    >
+                      <item.icon
+                        className={`h-5 w-5 ${
+                          isActive ? "text-purple-600" : "text-gray-500 group-hover:text-purple-500"
+                        }`}
+                      />
+                      {!isCollapsed && <span>{item.label}</span>}
+                    </motion.button>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="space-y-2 border-t border-gray-200 pt-4">
+              <button
+                className={`flex w-full items-center rounded-xl px-3 py-2 text-left text-gray-700 transition-all hover:bg-gray-100 ${
+                  isCollapsed ? "justify-center" : "gap-3"
+                }`}
+              >
+                <Settings className="h-5 w-5" />
+                {!isCollapsed && <span>Settings</span>}
+              </button>
+              <Link href="/">
+                <button
+                  className={`flex w-full items-center rounded-xl px-3 py-2 text-left text-gray-700 transition-all hover:bg-gray-100 ${
+                    isCollapsed ? "justify-center" : "gap-3"
+                  }`}
+                >
+                  <LogOut className="h-5 w-5 text-rose-500" />
+                  {!isCollapsed && <span>Logout</span>}
+                </button>
+              </Link>
             </div>
           </nav>
         </aside>

@@ -24,10 +24,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import axios from "axios";
+import { API_BASE_URL } from "@/config/env";
 import { useRouter } from "next/navigation";
 import type { PatientReport } from "@/lib/types";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
+const API_BASE = API_BASE_URL;
 
 type RecordSource = "upload" | "ai";
 

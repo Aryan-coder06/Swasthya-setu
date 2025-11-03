@@ -18,6 +18,7 @@ import {
 } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { Toaster } from "@/components/ui/toaster";
+import { API_BASE_URL } from "@/config/env";
 
 interface Service {
   name: string;
@@ -36,7 +37,7 @@ interface Invoice {
 }
 
 export default function ReceptionistBillingPage() {
-  const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
+  const API_BASE = API_BASE_URL;
 
   const { toast } = useToast();
   const [invoices, setInvoices] = useState<Invoice[]>([]);

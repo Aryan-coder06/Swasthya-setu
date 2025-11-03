@@ -1,10 +1,11 @@
-"use client";
+  "use client";
 
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { useToast } from "@/hooks/use-toast"; // Corrected import path
 
 // Define the shape of the profile data
 interface ProfileData {
+  id: string | null;
   firstName: string;
   lastName: string;
   email: string;
@@ -17,7 +18,6 @@ interface ProfileData {
   profilePic: string; // Can be a URL or a base64 string
 }
 
-// Define the shape of the context's value
 interface ProfileContextType {
   profileData: ProfileData;
   updateProfileData: (updates: Partial<ProfileData>) => void;
@@ -27,8 +27,8 @@ interface ProfileContextType {
 
 const ProfileContext = createContext<ProfileContextType | undefined>(undefined);
 
-// Set the initial state for the profile
 const initialProfileData: ProfileData = {
+  id: null,
   firstName: "John",
   lastName: "Doe",
   email: "john.doe@example.com",
@@ -41,13 +41,11 @@ const initialProfileData: ProfileData = {
   profilePic: "",
 };
 
-// Create the provider component that will wrap parts of your app
 export const ProfileProvider = ({ children }: { children: ReactNode }) => {
   const [profileData, setProfileData] = useState<ProfileData>(initialProfileData);
   const [isDirty, setIsDirty] = useState(false);
   const { toast } = useToast();
 
-  // Load user data from localStorage on mount
   useEffect(() => {
     const storedUser = localStorage.getItem('user');
     if (storedUser) {
@@ -55,6 +53,7 @@ export const ProfileProvider = ({ children }: { children: ReactNode }) => {
         const userData = JSON.parse(storedUser);
         setProfileData(prev => ({
           ...prev,
+          id: userData.id || prev.id,
           firstName: userData.firstName || prev.firstName,
           lastName: userData.lastName || prev.lastName,
           email: userData.email || prev.email,
@@ -104,4 +103,3 @@ export const useProfile = () => {
   }
   return context;
 };
-

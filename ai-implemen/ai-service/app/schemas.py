@@ -410,3 +410,15 @@ class AnalysisResponse(BaseModel):
     status: Literal["success", "error"]
     message: str
     report: Optional[PatientReport] = None
+
+
+class StructuredPrescriptionRequest(BaseModel):
+    doctor_name: Optional[str] = None
+    patient_name: Optional[str] = None
+    patient_id: Optional[str] = None
+    date_issued: Optional[str] = None
+    medications: List[Medication] = Field(default_factory=list)
+    notes: Optional[str] = None
+    precautions: Optional[str] = None
+    vitals: Optional[Dict[str, str]] = None
+    diseases_diagnoses: Optional[List[str]] = None

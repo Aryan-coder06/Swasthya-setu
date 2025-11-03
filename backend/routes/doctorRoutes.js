@@ -12,6 +12,7 @@ import {
   createDoctorPatientHandler,
   listDoctorRecords,
   listDoctorConsultations,
+  listDoctorDirectory,
   createPrescription,
   analyzePrescription,
 } from "../controllers/doctorController.js";
@@ -20,6 +21,8 @@ const router = express.Router();
 
 // Meeting link management must stay above generic appointment routes to avoid conflicts
 router.post("/appointments/:id/create-meeting", createMeetingLink);
+
+router.get("/directory/list", listDoctorDirectory);
 
 router.get("/profile/:doctorId", getDoctorProfileHandler);
 router.put("/profile/:doctorId", updateDoctorProfileHandler);

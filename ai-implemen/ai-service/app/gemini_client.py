@@ -17,6 +17,13 @@ from google import genai
 from google.genai import types
 from google.genai.errors import APIError as GeminiAPIError
 
+from app.schemas import (
+    PrescriptionData,
+    PatientReportAI,
+    PatientReport,
+    StructuredPrescriptionRequest,
+)
+
 # --------------------------------------------------------------------
 # Runtime setup
 # --------------------------------------------------------------------
@@ -119,8 +126,12 @@ def _retry_generate_content(
             return text
         except GeminiAPIError as e:
             msg = str(e)
-            is_429 = "RESOURCE_EXHAUSTED" in msg or "429" in msg
-            if is_429 and attempt < max_attempts:
+            status_code = getattr(e, "status_code", None)
+            retryable = (
+                any(token in msg for token in ("RESOURCE_EXHAUSTED", "429", "UNAVAILABLE", "overloaded"))
+                or status_code in {429, 503}
+            )
+            if retryable and attempt < max_attempts:
                 retry_after = _parse_retry_after_seconds(e) or (base_sleep * (2 ** (attempt - 1)))
                 retry_after += random.uniform(0, 0.4)
                 time.sleep(retry_after)
@@ -245,8 +256,6 @@ def _generate_json_with_schema(
 # Public orchestrator
 # --------------------------------------------------------------------
 def analyze_prescription_image(base64_image: str) -> Tuple[Dict[str, Any], str]:
-    from app.schemas import PrescriptionData, PatientReportAI, PatientReport
-
     if client is None or not API_KEY:
         return {"error": "API Key Missing: set GEMINI_API_KEY and restart."}, "Init Error"
 
@@ -336,6 +345,71 @@ def analyze_prescription_image(base64_image: str) -> Tuple[Dict[str, Any], str]:
     # -------- Promote → PatientReport --------
     try:
         final_payload = {**ai_report_dict, "raw_extracted_data": extracted_dict}
+        final_report = PatientReport(**final_payload)
+        return final_report.model_dump(), "Success"
+    except ValidationError as ve:
+        return {
+            "error": f"Final report validation failed: {ve}",
+            "ai_report_preview": json.dumps(ai_report_dict, ensure_ascii=False)[:2000],
+        }, "Promotion Error"
+    except Exception as e:
+        return {"error": f"Unexpected error promoting report: {e}"}, "Promotion Error"
+
+
+def analyze_prescription_structured(request: StructuredPrescriptionRequest) -> Tuple[Dict[str, Any], str]:
+    from app.schemas import PatientReport  # avoid circular import
+
+    if client is None or not API_KEY:
+        return {"error": "API Key Missing: set GEMINI_API_KEY and restart."}, "Init Error"
+
+    structured = request.model_dump()
+    medications = structured.get("medications", [])
+    raw_structured = {
+        "hospital_name": None,
+        "doctor_name": structured.get("doctor_name"),
+        "patient_name": structured.get("patient_name"),
+        "patient_id": structured.get("patient_id"),
+        "date_issued": structured.get("date_issued"),
+        "vitals": structured.get("vitals"),
+        "diseases_diagnoses": structured.get("diseases_diagnoses") or [],
+        "medications": medications,
+        "treatment_notes": structured.get("notes"),
+        "precautions": structured.get("precautions"),
+        "raw_lines": [],
+    }
+
+    synthesis_prompt = (
+        "You are a clinical AI assistant. Convert the structured prescription data provided below into a patient-friendly JSON summary.\n"
+        "Return ONLY JSON with this exact shape:\n"
+        "{\n"
+        '  "summary_header": string,\n'
+        '  "report_sections": [\n'
+        '    { "title": string, "color": "red" | "yellow" | "green", "items": [string, ...] }, ...\n'
+        "  ],\n"
+        '  "patient_name": string?,\n'
+        '  "doctor_name": string?,\n'
+        '  "date_issued": string?\n'
+        "}\n"
+        "Guidelines:\n"
+        "- Use the structured data precisely—do not invent medications or conditions.\n"
+        "- Highlight unresolved risks, adherence reminders, and monitoring needs.\n"
+        "- Use red for urgent concerns, yellow for cautionary monitoring, green for routine or positive notes.\n"
+        "- If notes mention follow-up, include it in the appropriate section.\n\n"
+        f"STRUCTURED DATA:\n{json.dumps(structured, ensure_ascii=False, indent=2)}\n"
+    )
+
+    ai_report_dict, synthesis_raw = _generate_json_with_schema(
+        model_name=TEXT_ANALYSIS_MODEL,
+        prompt=synthesis_prompt,
+        schema=PatientReportAI,
+        cache=None,
+        cache_key=sha256_hex(json.dumps(structured, sort_keys=True).encode("utf-8")),
+    )
+    if "error" in ai_report_dict:
+        return {"error": ai_report_dict["error"], "provider_raw": synthesis_raw[:4000]}, "Synthesis Error"
+
+    try:
+        final_payload = {**ai_report_dict, "raw_extracted_data": raw_structured}
         final_report = PatientReport(**final_payload)
         return final_report.model_dump(), "Success"
     except ValidationError as ve:

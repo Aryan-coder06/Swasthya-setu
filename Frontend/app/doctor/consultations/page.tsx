@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import { Video, Plus, Search, Loader } from "lucide-react";
 import axios from "axios";
+import { apiRoute } from "@/config/env";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -16,8 +17,6 @@ import { useToast } from "@/hooks/use-toast";
 import { Toaster } from "@/components/ui/toaster";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useDoctorProfile } from "@/app/context/DoctorProfileContext";
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
 
 interface Consultation {
   id: number;
@@ -46,6 +45,8 @@ const getStatusBadge = (status: string) => {
   }
 };
 
+const NEW_PATIENT_VALUE = "__new_patient__";
+
 export default function DoctorConsultationsPage() {
   const { profileData } = useDoctorProfile();
   const { toast } = useToast();
@@ -64,7 +65,7 @@ export default function DoctorConsultationsPage() {
     if (!profileData.id) return;
     try {
       setLoading(true);
-      const response = await axios.get<Consultation[]>(`${API_URL}/api/doctor/${profileData.id}/consultations`, {
+      const response = await axios.get<Consultation[]>(apiRoute(`/api/doctor/${profileData.id}/consultations`), {
         params: { t: Date.now() },
       });
       setConsultations(response.data ?? []);
@@ -83,7 +84,7 @@ export default function DoctorConsultationsPage() {
   const fetchPatients = useCallback(async () => {
     if (!profileData.id) return;
     try {
-      const response = await axios.get(`${API_URL}/api/doctor/${profileData.id}/patients`);
+      const response = await axios.get(apiRoute(`/api/doctor/${profileData.id}/patients`));
       const raw = Array.isArray(response.data) ? response.data : [];
       const options: PatientOption[] = raw
         .filter((patient: any) => !!patient.id)
@@ -138,7 +139,7 @@ export default function DoctorConsultationsPage() {
     }
 
     try {
-      await axios.post(`${API_URL}/api/doctor/${profileData.id}/appointments`, {
+      await axios.post(apiRoute(`/api/doctor/${profileData.id}/appointments`), {
         patientId: selectedPatientId,
         patientName: selectedPatientId ? undefined : patientName,
         appointmentDate: date,
@@ -174,7 +175,7 @@ export default function DoctorConsultationsPage() {
       }
 
       toast({ title: "Generating meeting", description: "Creating a secure session..." });
-      const response = await axios.post(`${API_URL}/api/doctor/appointments/${appointmentId}/create-meeting`);
+      const response = await axios.post(apiRoute(`/api/doctor/appointments/${appointmentId}/create-meeting`));
       const { meetingLink } = response.data;
 
       if (meetingLink) {
@@ -215,9 +216,9 @@ export default function DoctorConsultationsPage() {
               <div>
                 <Label>Select existing patient</Label>
                 <Select
-                  value={selectedPatientId ?? ""}
+                  value={selectedPatientId ?? NEW_PATIENT_VALUE}
                   onValueChange={(value) => {
-                    const resolved = value || null;
+                    const resolved = value === NEW_PATIENT_VALUE ? null : value;
                     setSelectedPatientId(resolved);
                     if (resolved) {
                       const selected = patients.find((patient) => patient.id === resolved);
@@ -229,9 +230,12 @@ export default function DoctorConsultationsPage() {
                     <SelectValue placeholder={patients.length ? "Choose patient" : "No patients found"} />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">New patient</SelectItem>
-                    {patients.map((patient) => (
-                      <SelectItem key={patient.id ?? patient.fullName} value={patient.id ?? ""}>
+                    <SelectItem value={NEW_PATIENT_VALUE}>New patient</SelectItem>
+                    {patients.map((patient, index) => (
+                      <SelectItem
+                        key={patient.id ?? `patient-${index}`}
+                        value={patient.id ?? `manual-${index}`}
+                      >
                         {patient.fullName}
                       </SelectItem>
                     ))}

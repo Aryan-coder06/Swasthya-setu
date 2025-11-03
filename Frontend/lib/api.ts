@@ -1,12 +1,10 @@
 // File Location: SWAS/Frontend/lib/api.ts
 
 import type { AnalysisResponse, SavePrescriptionPayload, SavePrescriptionResponse } from "./types";
-
-const AI_BASE_URL = process.env.NEXT_PUBLIC_AI_SERVICE_URL || "http://localhost:8000";
-const BACKEND_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
+import { aiRoute, apiRoute } from "@/config/env";
 
 export async function analyzePrescription(base64Image: string): Promise<AnalysisResponse> {
-  const res = await fetch(`${AI_BASE_URL}/analyze`, {
+  const res = await fetch(aiRoute("/analyze"), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ base64_image: base64Image }),
@@ -26,6 +24,7 @@ export async function analyzePrescription(base64Image: string): Promise<Analysis
       message: `Error: ${errorDetail}`,
       report: null,
     };
+
   }
 
   return payload as AnalysisResponse;
@@ -41,7 +40,7 @@ export async function savePrescriptionReport(
     formData.append("file", payload.file, payload.file.name);
   }
 
-  const res = await fetch(`${BACKEND_BASE_URL}/patient/prescriptions/save`, {
+  const res = await fetch(apiRoute("/patient/prescriptions/save"), {
     method: "POST",
     body: formData,
   });

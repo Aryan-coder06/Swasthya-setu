@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import { Calendar, Users, ClipboardList, TrendingUp } from "lucide-react";
 import axios from "axios";
+import { apiRoute } from "@/config/env";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -11,8 +12,7 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
 import { useDoctorProfile } from "../context/DoctorProfileContext";
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
+import { useRouter } from "next/navigation";
 
 interface DashboardResponse {
   profile: {
@@ -58,6 +58,7 @@ const getStatusColor = (status: string) => {
 export default function DoctorDashboardPage() {
   const { profileData } = useDoctorProfile();
   const { toast } = useToast();
+  const router = useRouter();
 
   const [dashboard, setDashboard] = useState<DashboardResponse | null>(null);
   const [loading, setLoading] = useState(false);
@@ -69,7 +70,7 @@ export default function DoctorDashboardPage() {
       try {
         setLoading(true);
         const response = await axios.get<DashboardResponse>(
-          `${API_URL}/api/doctor/${profileData.id}/dashboard`,
+          apiRoute(`/api/doctor/${profileData.id}/dashboard`),
           { params: { t: Date.now() } }
         );
         setDashboard(response.data);
@@ -126,6 +127,34 @@ export default function DoctorDashboardPage() {
     ];
   }, [dashboard]);
 
+  const greeting = useMemo(() => {
+    const hour = new Date().getHours();
+    if (hour < 12) return "Morning";
+    if (hour < 18) return "Afternoon";
+    return "Evening";
+  }, []);
+
+  const quickActions = useMemo(
+    () => [
+      {
+        title: "Schedule follow-up",
+        description: "Book a new slot or convert a consultation to an in-person visit.",
+        action: () => router.push("/doctor/appointments"),
+      },
+      {
+        title: "Launch virtual clinic",
+        description: "Start a video consultation room for the next appointment.",
+        action: () => router.push("/doctor/consultations"),
+      },
+      {
+        title: "Review prescriptions",
+        description: "Generate, edit or analyze prescriptions shared with patients.",
+        action: () => router.push("/doctor/prescriptions"),
+      },
+    ],
+    [router]
+  );
+
   const containerVariants = {
     hidden: { opacity: 0 },
     visible: {
@@ -146,25 +175,45 @@ export default function DoctorDashboardPage() {
       className="space-y-6"
     >
       <motion.div variants={itemVariants}>
-        <Card className="bg-gradient-to-r from-green-500 to-blue-500 text-white">
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between">
+        <Card className="bg-gradient-to-r from-emerald-500 via-teal-500 to-sky-500 text-white shadow-lg">
+          <CardContent className="p-6 space-y-4">
+            <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
               <div>
                 <h2 className="text-2xl font-bold mb-2">
-                  {`Good ${new Date().getHours() < 12 ? "Morning" : "Day"}, Dr. ${profileData.firstName}!`}
+                  {`Good ${greeting}, ${profileData.firstName ? `Dr. ${profileData.firstName}` : "Doctor"}`}
                 </h2>
-                <p className="text-green-100">
+                <p className="text-emerald-50">
                   {dashboard?.todayAppointments?.length
-                    ? `You have ${dashboard.todayAppointments.length} appointments scheduled for today.`
+                    ? `You have ${dashboard.todayAppointments.length} appointment${dashboard.todayAppointments.length > 1 ? "s" : ""} today.`
                     : "No appointments scheduled for today yet."}
                 </p>
               </div>
-              <div className="text-right">
-                <div className="text-3xl font-bold">
-                  {dashboard?.stats?.totalUniquePatients ?? "--"}
+              <div className="flex items-center gap-4">
+                <Avatar className="h-14 w-14 border border-white/50 shadow-inner">
+                  <AvatarFallback className="bg-white/30 text-white text-xl">
+                    {profileData.firstName?.[0]}
+                    {profileData.lastName?.[0]}
+                  </AvatarFallback>
+                </Avatar>
+                <div className="text-right">
+                  <div className="text-3xl font-bold">
+                    {dashboard?.stats?.totalUniquePatients ?? "--"}
+                  </div>
+                  <div className="text-sm text-emerald-50">Total Patients</div>
                 </div>
-                <div className="text-sm text-green-100">Total Patients</div>
               </div>
+            </div>
+            <div className="flex flex-wrap gap-2 text-sm text-emerald-50/90">
+              {profileData.specialty && (
+                <span className="inline-flex items-center rounded-full bg-white/20 px-3 py-1 backdrop-blur">
+                  Specialty: {profileData.specialty}
+                </span>
+              )}
+              {profileData.hospitalName && (
+                <span className="inline-flex items-center rounded-full bg-white/20 px-3 py-1 backdrop-blur">
+                  {profileData.hospitalName}
+                </span>
+              )}
             </div>
           </CardContent>
         </Card>
@@ -314,6 +363,25 @@ export default function DoctorDashboardPage() {
           </Card>
         </motion.div>
       </div>
+
+      <motion.div variants={itemVariants}>
+        <Card className="border border-gray-200 bg-white">
+          <CardHeader>
+            <CardTitle className="text-lg font-semibold text-gray-900">Quick actions</CardTitle>
+          </CardHeader>
+          <CardContent className="grid gap-4 md:grid-cols-3">
+            {quickActions.map((action) => (
+              <div key={action.title} className="rounded-lg border border-gray-200 p-4 shadow-sm hover:shadow-md transition-shadow">
+                <h3 className="font-medium text-gray-900">{action.title}</h3>
+                <p className="text-sm text-gray-600 mt-1">{action.description}</p>
+                <Button variant="outline" className="mt-4" onClick={action.action}>
+                  Open
+                </Button>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      </motion.div>
     </motion.div>
   );
 }

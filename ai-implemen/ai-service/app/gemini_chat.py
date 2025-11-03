@@ -1,6 +1,8 @@
 # app/gemini_chat.py
 import os, json, re, time, random, hashlib
 from typing import List, Dict, Tuple, Optional
+import textwrap
+
 
 from dotenv import load_dotenv
 from pydantic import ValidationError
@@ -8,7 +10,14 @@ from google import genai
 from google.genai import types
 from google.genai.errors import APIError as GeminiAPIError
 
-from app.chat_schemas import ChatMessageIn, ChatMessageOut, ChatAIResponse, ChatPatientContext
+from app.chat_schemas import (
+    ChatMessageIn,
+    ChatMessageOut,
+    ChatAIResponse,
+    ChatPatientContext,
+    ChatAttachment,
+)
+from app.gemini_client import analyze_prescription_image
 
 load_dotenv()
 API_KEY = os.getenv("GEMINI_API_KEY", "").strip()
@@ -71,6 +80,8 @@ and guidance. HARD RULES:
   'red_flags' explaining why; recommend immediate medical care.
 - If information is insufficient for dosing, DO NOT guess; ask for details and keep prescription empty.
 - Only OTC items may appear in 'prescription.medicines', with 'otc': true. Otherwise keep it empty.
+- Previous_reports / attachment context may contain prescription summaries or lab history. Reference them to compare
+  improvements, unresolved issues, medication adherence, and highlight trends. If conflicts exist, flag them.
 - Always return valid JSON that matches the requested schema exactly, no extra commentary.
 """
 
@@ -84,6 +95,17 @@ def _build_user_prompt(user_text: str, ctx: Optional[ChatPatientContext]) -> str
         if ctx.current_meds: ctx_lines.append(f"current_meds: {', '.join(ctx.current_meds)}")
         if ctx.chronic_conditions: ctx_lines.append(f"chronic_conditions: {', '.join(ctx.chronic_conditions)}")
         if ctx.country: ctx_lines.append(f"country: {ctx.country}")
+        if ctx.previous_reports:
+            snippets = []
+            for idx, snippet in enumerate(ctx.previous_reports[:5]):
+                clean = (snippet or "").strip()
+                if not clean:
+                    continue
+                if len(clean) > 380:
+                    clean = clean[:380] + "..."
+                snippets.append(f"report_{idx + 1}: {clean}")
+            if snippets:
+                ctx_lines.append("previous_reports:\n" + "\n".join(f"  - {line}" for line in snippets))
     ctx_block = "\n".join(ctx_lines) if ctx_lines else "none"
     return (
         f"PATIENT CONTEXT:\n{ctx_block}\n\n"
@@ -107,11 +129,81 @@ def _build_user_prompt(user_text: str, ctx: Optional[ChatPatientContext]) -> str
         "If unsure, ask 2-3 clarifying questions inside reply_markdown and keep prescription empty."
     )
 
+def _summarize_patient_report(report: Dict, title: Optional[str] = None) -> str:
+    if not isinstance(report, dict):
+        return "Attachment provided but could not be summarised."
+
+    summary_header = (report.get("summary_header") or title or "Prescription summary").strip()
+    sections = report.get("report_sections") or []
+    lines: List[str] = [summary_header]
+
+    for section in sections[:3]:
+        if not isinstance(section, dict):
+            continue
+        sec_title = section.get("title") or section.get("name") or "Section"
+        items = section.get("items") or []
+        if isinstance(items, list):
+            cleaned_items = [str(item).strip() for item in items if isinstance(item, str)][:2]
+            if cleaned_items:
+                lines.append(f"{sec_title}: {', '.join(cleaned_items)}")
+
+    raw = report.get("raw_extracted_data") or {}
+    meds = raw.get("medications") if isinstance(raw, dict) else None
+    if isinstance(meds, list) and meds:
+        med_names = []
+        for med in meds[:3]:
+            if isinstance(med, dict):
+                name = med.get("name") or med.get("drug_name")
+                if name:
+                    med_names.append(str(name).strip())
+        if med_names:
+            lines.append(f"Medications noted: {', '.join(med_names)}")
+
+    summary = ". ".join(line for line in lines if line).strip()
+    if len(summary) > 600:
+        summary = summary[:600] + "..."
+    return summary or "Attachment provided."
+
+def _sanitize_base64(content: str) -> str:
+    if not content:
+        return ""
+    return content.split(",")[-1].strip()
+
 def chat_respond(payload: ChatMessageIn) -> Tuple[Dict, str]:
     """
     Calls Gemini with guardrails, validates JSON into ChatAIResponse,
     returns a serializable dict ready for the frontend.
     """
+    attachment_notes: List[str] = []
+    if payload.attachments:
+        for attachment in payload.attachments[:5]:
+            if not isinstance(attachment, ChatAttachment):
+                continue
+            title = attachment.title or attachment.kind.replace("_", " ").title()
+            try:
+                if attachment.kind == "image_base64":
+                    b64 = _sanitize_base64(attachment.content)
+                    if not b64:
+                        attachment_notes.append(f"[Attachment: {title}] Image was empty or unreadable.")
+                        continue
+                    report, status = analyze_prescription_image(b64)
+                    if isinstance(report, dict) and "error" not in report:
+                        summary = _summarize_patient_report(report, title)
+                        attachment_notes.append(f"[Attachment: {title}] {summary}")
+                    else:
+                        reason = report.get("error") if isinstance(report, dict) else "analysis failed"
+                        attachment_notes.append(f"[Attachment: {title}] Unable to analyse image ({reason}).")
+                elif attachment.kind in {"report_summary", "note"}:
+                    snippet = (attachment.content or "").strip()
+                    if not snippet:
+                        continue
+                    if len(snippet) > 600:
+                        snippet = snippet[:600] + "..."
+                    prefix = "Report summary" if attachment.kind == "report_summary" else "Note"
+                    attachment_notes.append(f"[{prefix}: {title}] {snippet}")
+            except Exception as exc:  # defensive, never break chat on attachment issues
+                attachment_notes.append(f"[Attachment: {title}] Processing error: {exc}")
+
     # Build contents: system -> prior turns -> user
     parts: List[types.Part] = [types.Part(text=SYSTEM_GUARDRAILS)]
     # include brief history if provided
@@ -119,6 +211,9 @@ def chat_respond(payload: ChatMessageIn) -> Tuple[Dict, str]:
         for turn in payload.history[-6:]:
             role = "user" if turn.get("role") == "user" else "model"
             parts.append(types.Part(text=f"{role.upper()}:\n{turn.get('content','')}"))
+    if attachment_notes:
+        attachment_text = "ATTACHMENT CONTEXT:\n" + "\n".join(attachment_notes)
+        parts.append(types.Part(text=attachment_text))
     # current user message
     user_prompt = _build_user_prompt(payload.user_message, payload.patient_context)
     contents = [types.Content(role="user", parts=parts + [types.Part(text=user_prompt)])]

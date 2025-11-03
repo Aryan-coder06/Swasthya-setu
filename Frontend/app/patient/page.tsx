@@ -13,6 +13,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useRouter } from "next/navigation";
 import { useProfile } from "@/app/context/ProfileContext"; // Import the context hook
 import axios from "axios";
+import { apiRoute } from "@/config/env";
 
 // UI Components for Modals
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -91,7 +92,7 @@ export default function PatientDashboardPage() {
     formData.append("userId", profileData.id);
 
     try {
-      await axios.post("http://localhost:5000/profile/docs/add_doc", formData, {
+      await axios.post(apiRoute("/profile/docs/add_doc"), formData, {
         headers: { "Content-Type": "multipart/form-data" },
       });
       toast({

@@ -1,7 +1,7 @@
 // controllers/authControllers
 import supabase from "../main_server.js";
 import { add_patient_profile } from "../models/patient.js";
-import { add_doctor_profile } from "../models/doctor.js";
+import { add_doctor_profile, resolveHospitalDetails } from "../models/doctor.js";
 import { add_receptionist_profile } from "../models/receptionist.js";
 
 const signupPatient = async (req, res) => {
@@ -71,48 +71,137 @@ const signupDoctor = async (req, res) => {
       gender = null,
       age = null,
       spec = null,
+      hospitalId,
     } = req.body;
-    if (!email || !password)
+
+    if (!email || !password) {
       return res.status(400).json({ error: "email and password are required" });
+    }
+    if (!hospitalId) {
+      return res.status(400).json({ error: "hospitalId is required" });
+    }
 
+    let authUser = null;
+    let authSession = null;
     const { data, error } = await supabase.auth.signUp({ email, password });
+
     if (error) {
-      return res.json({
-        status: error.status,
-        code: error.code,
-        reason: error.reason || error.message || "none",
-      });
+      const code = error.code || error.message;
+      if (code === "user_already_exists" || error.message?.toLowerCase().includes("already registered")) {
+        // Try signing in with provided credentials to reuse existing account
+        const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
+          email,
+          password,
+        });
+
+        if (signInError) {
+          return res.status(400).json({
+            error: signInError.message || "User already registered. Try signing in instead.",
+          });
+        }
+
+        authUser = signInData.user;
+        authSession = signInData.session;
+      } else {
+        return res.status(error.status || 500).json({
+          error: error.reason || error.message || "Signup failed",
+        });
+      }
+    } else {
+      authUser = data.user;
+      authSession = data.session;
     }
 
-    const result = await add_doctor_profile(
-      data.user.id,
-      firstName,
-      lastName,
-      email,
-      gender,
-      spec,
-      age
-    );
-    if (result?.startsWith?.("Error")) {
-      return res.status(400).json({ error: result });
+    if (!authUser) {
+      return res.status(500).json({ error: "Unable to complete signup. Please try again." });
     }
+
+    // Ensure the doctor profile exists (or update if already present)
+    const ensureProfile = async () => {
+      const { data: existingProfile, error: existingError } = await supabase
+        .from("Doctor_Profile")
+        .select("*")
+        .eq("id", authUser.id)
+        .maybeSingle();
+
+      if (existingError) {
+        return { error: existingError.message };
+      }
+
+      if (existingProfile) {
+        const updates = {};
+        if (firstName && firstName !== existingProfile.firstName) updates.firstName = firstName;
+        if (lastName && lastName !== existingProfile.lastName) updates.lastName = lastName;
+        if (spec && spec !== existingProfile.specs) updates.specs = spec;
+        if (gender && gender !== existingProfile.gender) updates.gender = gender;
+        if (age && age !== existingProfile.age) updates.age = age;
+
+        if (hospitalId) {
+          const { hospitalId: resolvedHospitalId, hospitalName } = await resolveHospitalDetails(hospitalId);
+          if (
+            resolvedHospitalId &&
+            (resolvedHospitalId !== existingProfile.hospital_id || hospitalName !== existingProfile.hospital_name)
+          ) {
+            updates.hospital_id = resolvedHospitalId;
+            updates.hospital_name = hospitalName;
+          }
+        }
+
+        if (Object.keys(updates).length) {
+          const { data: updatedProfile, error: updateError } = await supabase
+            .from("Doctor_Profile")
+            .update(updates)
+            .eq("id", authUser.id)
+            .select()
+            .single();
+          if (updateError) {
+            return { error: updateError.message };
+          }
+          return { data: updatedProfile, alreadyExists: true };
+        }
+
+        return { data: existingProfile, alreadyExists: true };
+      }
+
+      return await add_doctor_profile(
+        authUser.id,
+        firstName,
+        lastName,
+        email,
+        gender,
+        spec,
+        age,
+        hospitalId
+      );
+    };
+
+    const profileResult = await ensureProfile();
+    if (profileResult?.error) {
+      return res.status(400).json({ error: profileResult.error });
+    }
+
+    const profileData = profileResult.data || {};
+
     return res.json({
-      message: "Signup Successful",
+      message: profileResult.alreadyExists ? "Doctor profile linked successfully." : "Signup Successful",
       user: {
-        id: data.user.id,
-        email: data.user.email,
-        spec: spec || null,
+        id: authUser.id,
+        email: authUser.email,
+        spec: profileData.specs || spec || null,
+        hospitalId: profileData.hospital_id || hospitalId,
+        hospitalName: profileData.hospital_name || null,
       },
-      session: data.session
+      session: authSession
         ? {
-          access_token: data.session.access_token,
-          expires_in: data.session.expires_in,
-          refresh_token: data.session.refresh_token,
+          access_token: authSession.access_token,
+          expires_in: authSession.expires_in,
+          refresh_token: authSession.refresh_token,
         }
         : null,
     });
   } catch (error) {
-    return res.status(500).json({ error: error.message });
+    console.error("Doctor signup error:", error);
+    return res.status(500).json({ error: error.message || "Internal Server Error" });
   }
 };
 
@@ -126,10 +215,14 @@ const signupReceptionist = async (req, res) => {
       gender = null,
       age = null,
       password,
+      hospitalId,
     } = req.body;
 
     if (!email || !password) {
       return res.status(400).json({ error: "email and password are required" });
+    }
+    if (!hospitalId) {
+      return res.status(400).json({ error: "hospitalId is required" });
     }
 
     const { data, error } = await supabase.auth.signUp({ email, password });
@@ -151,7 +244,8 @@ const signupReceptionist = async (req, res) => {
       email,
       gender,
       phone_no,
-      age
+      age,
+      hospitalId
     );
 
     if (profileResult.error) {
@@ -167,6 +261,8 @@ const signupReceptionist = async (req, res) => {
         id: data.user.id,
         email: data.user.email,
         role: "receptionist",
+        hospitalId: profileResult?.data?.hospital_id || hospitalId,
+        hospitalName: profileResult?.data?.hospital_name || null,
       },
       session: data.session
         ? {
@@ -216,9 +312,12 @@ const signinPatient = async (req, res) => {
 
 const signinDoctor = async (req, res) => {
   try {
-    const { email, password } = req.body;
+    const { email, password, hospitalId } = req.body;
     if (!email || !password)
       return res.status(400).json({ error: "Email and password are required" });
+    if (!hospitalId) {
+      return res.status(400).json({ error: "hospitalId is required" });
+    }
 
     const { data, error } = await supabase.auth.signInWithPassword({
       email,
@@ -234,11 +333,21 @@ const signinDoctor = async (req, res) => {
 
     if (profileError)
       return res.status(400).json({ error: "No doctor profile found." });
+    if (!doctorData.hospital_id) {
+      return res.status(400).json({ error: "Doctor profile is not linked to a hospital." });
+    }
+    if (doctorData.hospital_id !== hospitalId) {
+      return res.status(403).json({ error: "Hospital selection does not match assigned hospital." });
+    }
 
     return res.json({
       message: "Doctor Signin Successful",
       role: "doctor",
-      user: doctorData,
+      user: {
+        ...doctorData,
+        hospitalId: doctorData.hospital_id,
+        hospitalName: doctorData.hospital_name,
+      },
       session: data.session,
     });
   } catch (error) {
@@ -248,9 +357,9 @@ const signinDoctor = async (req, res) => {
 
 const signinReceptionist = async (req, res) => {
   try {
-    const { email, password } = req.body;
-    if (!email || !password)
-      return res.status(400).json({ error: "Email and password are required" });
+    const { email, password, hospitalId } = req.body;
+    if (!email || !password || !hospitalId)
+      return res.status(400).json({ error: "Email, password, and hospitalId are required" });
 
     const { data, error } = await supabase.auth.signInWithPassword({
       email,
@@ -266,11 +375,21 @@ const signinReceptionist = async (req, res) => {
 
     if (profileError)
       return res.status(400).json({ error: "No receptionist profile found." });
+    if (!receptionistData.hospital_id) {
+      return res.status(400).json({ error: "Receptionist profile is not linked to a hospital." });
+    }
+    if (receptionistData.hospital_id !== hospitalId) {
+      return res.status(403).json({ error: "Hospital selection does not match assigned hospital." });
+    }
 
     return res.json({
       message: "Receptionist Signin Successful",
       role: "receptionist",
-      user: receptionistData,
+      user: {
+        ...receptionistData,
+        hospitalId: receptionistData.hospital_id,
+        hospitalName: receptionistData.hospital_name,
+      },
       session: data.session,
     });
   } catch (error) {

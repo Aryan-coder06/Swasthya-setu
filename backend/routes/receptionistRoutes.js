@@ -29,7 +29,7 @@ router.post("/appointments/create", createAppointment);
 router.get("/appointments/all", getAllAppointments);
 router.put("/appointments/update-status", updateAppointmentStatus);
 
-// router.post("/patients/register", registerPatient);
+router.post("/patients/register", registerPatient);
 router.get("/patients/all", getAllPatients);
 router.get("/patients/search", searchPatients);
 

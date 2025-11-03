@@ -1,15 +1,114 @@
 import supabase from "../main_server.js";
+import {
+  computeAppointmentWindow,
+  DEFAULT_DURATION_MINUTES,
+} from "../utils/appointmentTime.js";
 
-const create_appointment = async (patientName, doctorId, appointmentDate, appointmentTime, status = 'confirmed') => {
+const ACTIVE_APPOINTMENT_STATUSES = ["confirmed", "pending", "in-progress"];
+
+const isUUID = (value = "") =>
+  typeof value === "string" &&
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+
+const resolvePatientReference = async (patientId, fallbackName) => {
+  if (patientId && isUUID(patientId)) {
+    const { data, error } = await supabase
+      .from("Patient_Profile")
+      .select("id, firstName, lastName")
+      .eq("id", patientId)
+      .maybeSingle();
+
+    if (!error && data) {
+      const fullName = [data.firstName, data.lastName].filter(Boolean).join(" ").trim() || fallbackName || null;
+      return { patientId: data.id, patientName: fullName };
+    }
+  }
+
+  const safeName = typeof fallbackName === "string" && fallbackName.trim().length ? fallbackName.trim() : null;
+  return { patientId: null, patientName: safeName };
+};
+
+const resolveDoctorProfile = async (doctorId) => {
+  if (!doctorId || !isUUID(doctorId)) {
+    return { doctorId: null, doctorName: null };
+  }
+
+  const { data, error } = await supabase
+    .from("Doctor_Profile")
+    .select("id, firstName, lastName")
+    .eq("id", doctorId)
+    .maybeSingle();
+
+  if (error || !data) {
+    return { doctorId: null, doctorName: null };
+  }
+
+  const doctorName = [data.firstName, data.lastName].filter(Boolean).join(" ").trim() || null;
+  return { doctorId: data.id, doctorName };
+};
+
+const autoCompleteExpiredAppointments = async () => {
+  const nowIso = new Date().toISOString();
+  const { error } = await supabase
+    .from("appointments")
+    .update({ status: "completed" })
+    .in("status", ACTIVE_APPOINTMENT_STATUSES)
+    .not("end_at", "is", null)
+    .lte("end_at", nowIso);
+
+  if (error) {
+    console.error("Receptionist autoComplete error:", error);
+  }
+};
+
+const create_appointment = async (
+  {
+    patientId,
+    patientName,
+    doctorId,
+    appointmentDate,
+    appointmentTime,
+    status = "confirmed",
+  } = {}
+) => {
+  if (!doctorId || !appointmentDate || !appointmentTime) {
+    return { error: "Doctor, appointment date, and time are required." };
+  }
+
+  const [{ patientId: resolvedPatientId, patientName: resolvedPatientName }, doctorProfile] =
+    await Promise.all([
+      resolvePatientReference(patientId, patientName),
+      resolveDoctorProfile(doctorId),
+    ]);
+
+  if (!doctorProfile.doctorId) {
+    return { error: "Invalid doctor reference supplied. Please refresh your doctor directory." };
+  }
+
+  const { startIso, endIso } = computeAppointmentWindow({
+    appointmentDate,
+    appointmentTime,
+    durationMinutes: DEFAULT_DURATION_MINUTES,
+  });
+
+  if (!startIso || !endIso) {
+    return { error: "Invalid appointment date or time." };
+  }
+
   const { data, error } = await supabase
     .from("appointments")
     .insert([{
-      patient_name: patientName,
-      doctor_id: doctorId,
+      patient_id: resolvedPatientId,
+      patient_name: resolvedPatientName,
+      doctor_id: doctorProfile.doctorId,
+      doctor_name: doctorProfile.doctorName,
       appointment_date: appointmentDate,
       appointment_time: appointmentTime,
-      status: status,
-      created_at: new Date().toISOString()
+      start_at: startIso,
+      end_at: endIso,
+      duration_minutes: DEFAULT_DURATION_MINUTES,
+      status,
+      created_at: new Date().toISOString(),
     }])
     .select();
 
@@ -21,13 +120,17 @@ const create_appointment = async (patientName, doctorId, appointmentDate, appoin
 };
 
 const get_all_appointments = async () => {
+  await autoCompleteExpiredAppointments();
+
   const { data, error } = await supabase
     .from("appointments")
     .select(`
       *,
-      doctor:Doctor_Profile(firstName, lastName)
+      doctor:Doctor_Profile(id, firstName, lastName),
+      patient:Patient_Profile(id, firstName, lastName)
     `)
-    .order('appointment_date', { ascending: true });
+    .order("start_at", { ascending: true })
+    .order("appointment_date", { ascending: true });
 
   if (error) {
     console.error("Get appointments error:", error);

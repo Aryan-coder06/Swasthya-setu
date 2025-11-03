@@ -2,8 +2,7 @@
 
 import { createContext, useState, useContext, ReactNode, useEffect, useCallback } from "react";
 import { useToast } from "@/hooks/use-toast";
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
+import { apiRoute } from "@/config/env";
 
 interface DoctorProfileState {
   id: string | null;
@@ -14,6 +13,8 @@ interface DoctorProfileState {
   phone: string;
   bio: string;
   profilePic: string;
+  hospitalId: string | null;
+  hospitalName: string | null;
   gender?: string | null;
   age?: number | null;
 }
@@ -30,13 +31,15 @@ const DoctorProfileContext = createContext<DoctorProfileContextType | undefined>
 
 const initialProfileData: DoctorProfileState = {
   id: null,
-  firstName: "Sarah",
-  lastName: "Wilson",
-  specialty: "Cardiologist",
-  email: "sarah.wilson@swasthyasetu.com",
-  phone: "+91 98765 43210",
-  bio: "Dr. Sarah Wilson is a renowned cardiologist with over 15 years of experience in treating cardiovascular diseases. She is dedicated to providing the best care for her patients.",
-  profilePic: "https://placehold.co/200x200/E2E8F0/4A5568?text=SW",
+  firstName: "",
+  lastName: "",
+  specialty: "",
+  email: "",
+  phone: "",
+  bio: "",
+  profilePic: "",
+  hospitalId: null,
+  hospitalName: null,
   gender: null,
   age: null,
 };
@@ -49,7 +52,7 @@ export const DoctorProfileProvider = ({ children }: { children: ReactNode }) => 
 
   const fetchProfile = useCallback(async (doctorId: string) => {
     try {
-      const response = await fetch(`${API_URL}/api/doctor/profile/${doctorId}`, {
+      const response = await fetch(apiRoute(`/api/doctor/profile/${doctorId}`), {
         cache: "no-store",
       });
       if (!response.ok) {
@@ -87,6 +90,8 @@ export const DoctorProfileProvider = ({ children }: { children: ReactNode }) => 
           email: userData.email || initialProfileData.email,
           phone: userData.phone_no || initialProfileData.phone,
           specialty: userData.spec || userData.specialty || initialProfileData.specialty,
+          hospitalId: userData.hospitalId || userData.hospital_id || initialProfileData.hospitalId,
+          hospitalName: userData.hospitalName || userData.hospital_name || initialProfileData.hospitalName,
         };
         setProfileDataState(baseProfile);
         setOriginalProfileData(baseProfile);
@@ -128,7 +133,7 @@ export const DoctorProfileProvider = ({ children }: { children: ReactNode }) => 
     };
 
     try {
-      const response = await fetch(`${API_URL}/api/doctor/profile/${profileData.id}`, {
+      const response = await fetch(apiRoute(`/api/doctor/profile/${profileData.id}`), {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),

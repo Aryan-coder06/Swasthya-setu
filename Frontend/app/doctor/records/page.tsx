@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import { FileText, Search, Upload, Loader } from "lucide-react";
 import axios from "axios";
+import { apiRoute } from "@/config/env";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -14,8 +15,6 @@ import { useToast } from "@/hooks/use-toast";
 import { Toaster } from "@/components/ui/toaster";
 import { useDoctorProfile } from "@/app/context/DoctorProfileContext";
 import { Skeleton } from "@/components/ui/skeleton";
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
 
 interface PatientRecord {
   patientId: string;
@@ -49,7 +48,7 @@ export default function DoctorRecordsPage() {
     if (!profileData.id) return;
     try {
       setLoading(true);
-      const response = await axios.get(`${API_URL}/api/doctor/${profileData.id}/records`, {
+      const response = await axios.get(apiRoute(`/api/doctor/${profileData.id}/records`), {
         params: { t: Date.now() },
       });
       setRecords(response.data ?? []);
@@ -68,7 +67,7 @@ export default function DoctorRecordsPage() {
   const fetchPatients = useCallback(async () => {
     if (!profileData.id) return;
     try {
-      const response = await axios.get(`${API_URL}/api/doctor/${profileData.id}/patients`);
+      const response = await axios.get(apiRoute(`/api/doctor/${profileData.id}/patients`));
       const raw = Array.isArray(response.data) ? response.data : [];
       const options: PatientOption[] = raw
         .filter((patient: any) => !!patient.id)
@@ -123,7 +122,7 @@ export default function DoctorRecordsPage() {
 
     try {
       setUploading(true);
-      await axios.post(`${API_URL}/profile/docs/add_doc`, formData, {
+      await axios.post(apiRoute("/profile/docs/add_doc"), formData, {
         headers: { "Content-Type": "multipart/form-data" },
       });
 

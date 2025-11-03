@@ -12,12 +12,19 @@ class ChatPatientContext(BaseModel):
     current_meds: Optional[List[str]] = None
     chronic_conditions: Optional[List[str]] = None
     country: Optional[str] = None      # e.g., "IN" for India
+    previous_reports: Optional[List[str]] = None  # short text snippets summarising past visits
+
+class ChatAttachment(BaseModel):
+    kind: Literal["image_base64", "report_summary", "note"]
+    content: str
+    title: Optional[str] = None
 
 class ChatMessageIn(BaseModel):
     session_id: Optional[str] = None
     user_message: str = Field(min_length=1)
     patient_context: Optional[ChatPatientContext] = None
     history: Optional[List[Dict[str, str]]] = None
+    attachments: Optional[List[ChatAttachment]] = None
     # history format (optional): [{ "role": "user"|"ai", "content": "..." }, ...]
 
 # ---------- AI JSON response shapes ----------

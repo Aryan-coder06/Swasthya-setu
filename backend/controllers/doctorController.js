@@ -11,6 +11,7 @@ import {
   getDoctorPatients,
   getDoctorRecords,
   getDoctorConsultations,
+  listDoctorsDirectory,
   addPatientForDoctor,
   savePrescription,
   getPrescriptionById,
@@ -30,6 +31,8 @@ const mapDoctorProfile = (record) => ({
   age: record?.age ?? null,
   phone: record?.phone_no ?? record?.phone ?? "",
   bio: record?.bio ?? "",
+  hospitalId: record?.hospital_id ?? null,
+  hospitalName: record?.hospital_name ?? "",
 });
 
 const mapAppointmentRow = (row = {}) => ({
@@ -39,6 +42,9 @@ const mapAppointmentRow = (row = {}) => ({
   patientName: row.patient_name ?? "Unknown Patient",
   appointmentDate: row.appointment_date ?? null,
   appointmentTime: row.appointment_time ?? null,
+  startAt: row.start_at ?? null,
+  endAt: row.end_at ?? null,
+  durationMinutes: row.duration_minutes ?? 15,
   status: row.status ?? "pending",
   meetingLink: row.meeting_link ?? null,
   channel: row.meeting_link ? "Video Call" : "In-Person",
@@ -179,11 +185,14 @@ const getAnalyticsStats = async (req, res) => {
 const listDoctorAppointments = async (req, res) => {
   try {
     const { doctorId } = req.params;
+    const { date } = req.query ?? {};
     if (!doctorId) {
       return res.status(400).json({ error: "Doctor ID is required" });
     }
 
-    const { data, error } = await getDoctorAppointments(doctorId);
+    const { data, error } = await getDoctorAppointments(doctorId, {
+      date,
+    });
     if (error) {
       console.error("List appointments error:", error);
       return res.status(500).json({ error: "Could not load appointments." });
@@ -214,9 +223,10 @@ const createDoctorAppointmentHandler = async (req, res) => {
       mode,
     });
 
-    if (error) {
-      console.error("Create appointment error:", error);
-      return res.status(500).json({ error: "Could not create appointment." });
+    if (error || !data) {
+      const errorMessage = error?.message || "Could not create appointment.";
+      console.error("Create appointment error:", errorMessage);
+      return res.status(400).json({ error: errorMessage });
     }
 
     return res.status(201).json(mapAppointmentRow(data));
@@ -412,6 +422,33 @@ const analyzePrescription = async (req, res) => {
   }
 };
 
+const listDoctorDirectory = async (req, res) => {
+  try {
+    const { hospitalId } = req.query ?? {};
+    const { data, error } = await listDoctorsDirectory({ hospitalId });
+    if (error) {
+      console.error("Doctor directory error:", error);
+      return res.status(500).json({ error: "Unable to list doctors." });
+    }
+
+    const mapped = (data ?? []).map((doctor) => ({
+      id: doctor.id,
+      firstName: doctor.firstName ?? "",
+      lastName: doctor.lastName ?? "",
+      fullName: `${doctor.firstName ?? ""} ${doctor.lastName ?? ""}`.trim(),
+      specialty: doctor.specs ?? "",
+      email: doctor.email ?? "",
+      hospitalId: doctor.hospital_id ?? null,
+      hospitalName: doctor.hospital_name ?? "",
+    }));
+
+    return res.status(200).json({ data: mapped });
+  } catch (error) {
+    console.error("Doctor directory handler error:", error);
+    return res.status(500).json({ error: "Internal Server Error" });
+  }
+};
+
 export {
   createMeetingLink,
   getDoctorProfileHandler,
@@ -425,6 +462,7 @@ export {
   createDoctorPatientHandler,
   listDoctorRecords,
   listDoctorConsultations,
+  listDoctorDirectory,
   createPrescription,
   analyzePrescription,
 };

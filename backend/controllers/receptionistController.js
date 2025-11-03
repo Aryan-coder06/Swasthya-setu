@@ -32,14 +32,21 @@ const getDashboardStats = async (req, res) => {
 
 const createAppointment = async (req, res) => {
   try {
-    const { patientId, doctorId, date, time } = req.body;
+    const { patientId, patientName, doctorId, date, time, status } = req.body ?? {};
 
-    if (!patientId || !doctorId || !date || !time) {
-      return res.status(400).json({ error: "All fields are required" });
+    if (!doctorId || !date || !time) {
+      return res.status(400).json({ error: "doctorId, date, and time are required to create an appointment." });
     }
 
-    const { data, error } = await create_appointment(patientId, doctorId, date, time);
-    
+    const { data, error } = await create_appointment({
+      patientId: patientId || null,
+      patientName: patientName || null,
+      doctorId,
+      appointmentDate: date,
+      appointmentTime: time,
+      status: status || "confirmed",
+    });
+
     if (error) return res.status(400).json({ error });
 
     res.status(201).json({

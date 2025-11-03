@@ -67,6 +67,11 @@
   }
   body {
     @apply bg-background text-foreground;
+    background-image:
+      radial-gradient(circle at 10% 20%, rgba(108, 230, 197, 0.22), transparent 60%),
+      radial-gradient(circle at 80% 0%, rgba(124, 196, 255, 0.2), transparent 55%),
+      linear-gradient(180deg, rgba(255, 255, 255, 0.95), rgba(244, 251, 249, 0.95));
+    background-attachment: fixed;
   }
   
   .healthcare-gradient {
@@ -81,6 +86,23 @@
     background: rgba(255, 255, 255, 0.1);
     backdrop-filter: blur(10px);
     border: 1px solid rgba(255, 255, 255, 0.2);
+  }
+
+  .hero-headline,
+  .hero-headline .split-char {
+    background-image: linear-gradient(100deg, #0ea5e9 0%, #10b981 45%, #0284c7 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+
+  .hero-headline .split-char {
+    display: inline-block;
+  }
+
+  .bg-swasthya-gradient {
+    background-image:
+      linear-gradient(145deg, rgba(248, 253, 250, 0.92), rgba(236, 247, 255, 0.96));
   }
 }
 
@@ -103,4 +125,23 @@
 }
 html {
   scroll-behavior: smooth;
+}
+
+@keyframes click-spark {
+  0% {
+    transform: translate(-50%, -50%) scale(0.65);
+    opacity: 0.95;
+  }
+  60% {
+    transform: translate(-50%, -50%) scale(1.1) rotate(12deg);
+    opacity: 0.7;
+  }
+  100% {
+    transform: translate(-50%, -50%) scale(1.6);
+    opacity: 0;
+  }
+}
+
+.animate-click-spark {
+  animation: click-spark 0.6s ease-out forwards;
 }

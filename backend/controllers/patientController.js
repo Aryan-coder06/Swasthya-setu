@@ -1,5 +1,10 @@
-
-import { add_patient_profile, get_patient_profile, update_patient_profile } from "../models/patient.js";
+import {
+    add_patient_profile,
+    get_patient_profile,
+    update_patient_profile,
+    list_patient_appointments,
+    book_patient_appointment,
+} from "../models/patient.js";
 import { createPrescriptionReport, listPrescriptionReports } from "../models/prescriptions.js";
 
 const addPatientProfile = async (req, res) => {
@@ -114,4 +119,82 @@ const getPrescriptionReports = async (req, res) => {
     }
 };
 
-export { addPatientProfile, getPatientProfile, updatePatientProfile, savePrescriptionReport, getPrescriptionReports };
+const listPatientAppointmentsHandler = async (req, res) => {
+    try {
+        const patientId = req.body?.patientId || req.query?.patientId;
+
+        if (!patientId) {
+            return res.status(400).json({ error: "patientId is required" });
+        }
+
+        const { data, error } = await list_patient_appointments(patientId);
+
+        if (error) {
+            throw new Error(error.message || "Failed to fetch appointments");
+        }
+
+        const mapped = (data || []).map((row) => ({
+            id: row.id,
+            doctorId: row.doctor_id,
+            doctor: row.doctor ? {
+                id: row.doctor.id,
+                firstName: row.doctor.firstName,
+                lastName: row.doctor.lastName,
+                specialty: row.doctor.specs,
+                hospitalId: row.doctor.hospital_id,
+                hospitalName: row.doctor.hospital_name,
+            } : null,
+            appointmentDate: row.appointment_date,
+            appointmentTime: row.appointment_time,
+            startAt: row.start_at,
+            endAt: row.end_at,
+            durationMinutes: row.duration_minutes ?? 15,
+            status: row.status,
+            meetingLink: row.meeting_link || null,
+            patientName: row.patient_name || null,
+        }));
+
+        return res.status(200).json({ data: mapped });
+    } catch (error) {
+        console.error("Error fetching patient appointments:", error);
+        return res.status(500).json({ error: error?.message || "Failed to fetch appointments." });
+    }
+};
+
+const bookPatientAppointmentHandler = async (req, res) => {
+    try {
+        const { patientId, doctorId, appointmentDate, appointmentTime, reason } = req.body ?? {};
+
+        if (!patientId || !doctorId || !appointmentDate || !appointmentTime) {
+            return res.status(400).json({ error: "patientId, doctorId, appointmentDate, and appointmentTime are required" });
+        }
+
+        const { data, error } = await book_patient_appointment({
+            patientId,
+            doctorId,
+            appointmentDate,
+            appointmentTime,
+            reason,
+        });
+
+        if (error || !data) {
+            const message = error?.message || "Failed to book appointment.";
+            return res.status(400).json({ error: message });
+        }
+
+        return res.status(201).json({ message: "Appointment booked successfully", data });
+    } catch (error) {
+        console.error("Error booking patient appointment:", error);
+        return res.status(500).json({ error: error?.message || "Failed to book appointment." });
+    }
+};
+
+export {
+    addPatientProfile,
+    getPatientProfile,
+    updatePatientProfile,
+    savePrescriptionReport,
+    getPrescriptionReports,
+    listPatientAppointmentsHandler,
+    bookPatientAppointmentHandler,
+};

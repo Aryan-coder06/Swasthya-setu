@@ -24,6 +24,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
+import { API_BASE_URL } from "@/config/env";
 import { Toaster } from "@/components/ui/toaster";
 
 interface RawWard {
@@ -44,7 +45,7 @@ interface Ward {
 }
 
 export default function ReceptionistBedPage() {
-  const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
+  const API_BASE = API_BASE_URL;
 
   const { toast } = useToast();
   const [bedStatus, setBedStatus] = useState<Ward[]>([]);
@@ -257,7 +258,7 @@ const handleNewAdmission = async (e: React.FormEvent<HTMLFormElement>) => {
           <CardContent className="text-center py-8 text-gray-500">
             <p>No wards found in database.</p>
             <p className="text-sm mt-2">
-              Add rows to <code class about="supabase">bed_management</code> table.
+              Add rows to <code className="supabase">bed_management</code> table.
             </p>
           </CardContent>
         </Card>

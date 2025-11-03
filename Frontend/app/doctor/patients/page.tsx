@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import { UserPlus, Search, FileText, Loader } from "lucide-react";
 import axios from "axios";
+import { apiRoute } from "@/config/env";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -16,8 +17,6 @@ import { useToast } from "@/hooks/use-toast";
 import { Toaster } from "@/components/ui/toaster";
 import { useDoctorProfile } from "@/app/context/DoctorProfileContext";
 import { Skeleton } from "@/components/ui/skeleton";
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
 
 interface DoctorPatient {
   id: string | null;
@@ -59,7 +58,7 @@ export default function DoctorPatientsPage() {
     if (!profileData.id) return;
     try {
       setLoading(true);
-      const response = await axios.get(`${API_URL}/api/doctor/${profileData.id}/patients`);
+      const response = await axios.get(apiRoute(`/api/doctor/${profileData.id}/patients`));
       const mapped: DoctorPatient[] = (response.data || []).map((patient: any) => ({
         id: patient.id,
         firstName: patient.firstName ?? "",
@@ -106,7 +105,8 @@ export default function DoctorPatientsPage() {
     const formData = new FormData(e.currentTarget);
     const firstName = (formData.get("firstName") as string)?.trim();
     const lastName = (formData.get("lastName") as string)?.trim();
-    const gender = (formData.get("gender") as string) || null;
+    const genderRaw = (formData.get("gender") as string) || "unspecified";
+    const gender = genderRaw === "unspecified" ? null : genderRaw;
     const ageValue = formData.get("age") as string;
     const phone = (formData.get("phone") as string)?.trim();
     const email = (formData.get("email") as string)?.trim();
@@ -122,7 +122,7 @@ export default function DoctorPatientsPage() {
     }
 
     try {
-      const response = await axios.post(`${API_URL}/api/doctor/${profileData.id}/patients`, {
+      const response = await axios.post(apiRoute(`/api/doctor/${profileData.id}/patients`), {
         firstName,
         lastName,
         gender,
@@ -195,12 +195,12 @@ export default function DoctorPatientsPage() {
                 </div>
                 <div>
                   <Label htmlFor="gender">Gender</Label>
-                  <Select name="gender" defaultValue="">
+                  <Select name="gender" defaultValue="unspecified">
                     <SelectTrigger>
                       <SelectValue placeholder="Select" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="">Prefer not to say</SelectItem>
+                      <SelectItem value="unspecified">Prefer not to say</SelectItem>
                       <SelectItem value="Female">Female</SelectItem>
                       <SelectItem value="Male">Male</SelectItem>
                       <SelectItem value="Other">Other</SelectItem>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Eye, EyeOff, Heart, User, Stethoscope, Users, ArrowLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -13,6 +13,17 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import axios from "axios";
+import { API_BASE_URL, apiRoute } from "@/config/env";
+
+const API_URL = API_BASE_URL;
+
+type HospitalOption = {
+  id: string;
+  name: string;
+  city?: string | null;
+  state?: string | null;
+  address?: string | null;
+};
 
 export default function AuthPage() {
   const [showPassword, setShowPassword] = useState(false);
@@ -27,6 +38,7 @@ export default function AuthPage() {
     gender: "",
     age: "",
     specialization: "",
+    hospitalId: "",
   });
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -34,6 +46,8 @@ export default function AuthPage() {
   const [forgotPasswordEmail, setForgotPasswordEmail] = useState("");
   const [forgotPasswordLoading, setForgotPasswordLoading] = useState(false);
   const [forgotPasswordMessage, setForgotPasswordMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
+  const [hospitalOptions, setHospitalOptions] = useState<HospitalOption[]>([]);
+  const [hospitalLoading, setHospitalLoading] = useState(false);
   const router = useRouter();
 
   const roles = [
@@ -63,6 +77,11 @@ export default function AuthPage() {
     },
   ];
 
+  const requiresHospital = useMemo(
+    () => selectedRole === "doctor" || selectedRole === "receptionist",
+    [selectedRole]
+  );
+
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setFormData({ ...formData, [e.target.id]: e.target.value });
   };
@@ -71,13 +90,58 @@ export default function AuthPage() {
     setFormData({ ...formData, gender: value });
   };
 
+  useEffect(() => {
+    if (!requiresHospital) {
+      setFormData((prev) => ({ ...prev, hospitalId: "" }));
+      return;
+    }
+
+    const fetchHospitals = async () => {
+      setHospitalLoading(true);
+      try {
+        const response = await axios.get(apiRoute("/auth/hospitals"), { params: { limit: 200 } });
+        const options: HospitalOption[] = Array.isArray(response.data?.data)
+          ? response.data.data
+          : [];
+        setHospitalOptions(options);
+      } catch (error) {
+        console.error("Failed to load hospitals:", error);
+        setHospitalOptions([]);
+      } finally {
+        setHospitalLoading(false);
+      }
+    };
+
+    if (hospitalOptions.length === 0) {
+      fetchHospitals();
+    }
+  }, [requiresHospital, hospitalOptions.length]);
+
+  useEffect(() => {
+    if (!requiresHospital) return;
+    if (formData.hospitalId) return;
+
+    const storedUser = typeof window !== "undefined" ? localStorage.getItem("user") : null;
+    if (storedUser) {
+      try {
+        const userData = JSON.parse(storedUser);
+        const storedHospital = userData?.hospitalId || userData?.hospital_id || "";
+        if (storedHospital) {
+          setFormData((prev) => ({ ...prev, hospitalId: storedHospital }));
+        }
+      } catch (error) {
+        console.error("Failed to parse stored user for hospital:", error);
+      }
+    }
+  }, [requiresHospital, formData.hospitalId]);
+
   const handleForgotPassword = async (e: React.FormEvent) => {
     e.preventDefault();
     setForgotPasswordLoading(true);
     setForgotPasswordMessage(null);
     try {
-      const response = await axios.post('http://localhost:5000/auth/forgot-password', {
-        email: forgotPasswordEmail
+      const response = await axios.post(apiRoute("/auth/forgot-password"), {
+        email: forgotPasswordEmail,
       });
       setForgotPasswordMessage({ type: "success", text: "Password reset email sent successfully. Please check your inbox." });
       setTimeout(() => {
@@ -101,7 +165,13 @@ export default function AuthPage() {
     setIsLoading(true);
     setMessage(null);
     try {
-      const payload = {
+      if ((selectedRole === "doctor" || selectedRole === "receptionist") && !formData.hospitalId) {
+        setMessage({ type: "error", text: "Select the hospital you are associated with." });
+        setIsLoading(false);
+        return;
+      }
+
+      const payload: Record<string, any> = {
         email: formData.email,
         password: formData.password,
         firstName: formData.firstName,
@@ -109,28 +179,30 @@ export default function AuthPage() {
         phone_no: formData.phone_no,
         gender: formData.gender,
         age: formData.age,
-        ...(selectedRole === "doctor" && { spec: formData.specialization }),
       };
-      console.log("Sending signup payload:", payload);
-      const response = await axios.post(`http://localhost:5000/auth/signup/${selectedRole}`, payload, {
+
+      if (selectedRole === "doctor") {
+        payload.spec = formData.specialization;
+      }
+      if (selectedRole !== "patient") {
+        payload.hospitalId = formData.hospitalId;
+      }
+
+      const response = await axios.post(apiRoute(`/auth/signup/${selectedRole}`), payload, {
         timeout: 30000,
       });
-      console.log("Signup response:", response.data);
-      
-      // Check if response contains an error
+
       const errorMsg = response.data.error || response.data.reason;
       if (errorMsg && errorMsg !== "None" && errorMsg !== null) {
-        setMessage({ 
-          type: "error", 
-          text: errorMsg || "Registration failed. Please try again." 
+        setMessage({
+          type: "error",
+          text: errorMsg || "Registration failed. Please try again.",
         });
         return;
       }
-      
-      // Only proceed if registration was successful
+
       if (response.data.user && response.data.session) {
         setMessage({ type: "success", text: response.data.message || "Registration successful!" });
-        // Store user data for later use
         localStorage.setItem("user", JSON.stringify(response.data.user));
         localStorage.setItem("session", JSON.stringify(response.data.session));
         setTimeout(() => {
@@ -146,7 +218,7 @@ export default function AuthPage() {
         type: "error",
         text:
           error.response?.status === 404
-            ? "Backend server not found. Ensure the server is running on http://localhost:5000."
+            ? "Backend server not found. Ensure the server is running on the configured API URL."
             : (errorText && errorText !== "None" ? errorText : "Registration failed. Please try again."),
       });
     } finally {
@@ -169,17 +241,25 @@ export default function AuthPage() {
     setIsLoading(true);
     setMessage(null);
     try {
-      const payload = {
+      if ((selectedRole === "doctor" || selectedRole === "receptionist") && !formData.hospitalId) {
+        setMessage({ type: "error", text: "Select your hospital before signing in." });
+        setIsLoading(false);
+        return;
+      }
+
+      const payload: Record<string, any> = {
         email: formData.email,
         password: formData.password,
       };
-      // console.log("Sending signin payload:", payload);
-      const response = await axios.post(`http://localhost:5000/auth/signin/${selectedRole}`, payload, {
+
+      if (selectedRole !== "patient") {
+        payload.hospitalId = formData.hospitalId;
+      }
+
+      const response = await axios.post(apiRoute(`/auth/signin/${selectedRole}`), payload, {
         timeout: 30000,
       });
-      console.log("Signin response:", response.data);
       setMessage({ type: "success", text: response.data.message });
-      // Store user and session data
       localStorage.setItem("user", JSON.stringify(response.data.user));
       localStorage.setItem("session", JSON.stringify(response.data.session));
       setTimeout(() => {
@@ -191,7 +271,7 @@ export default function AuthPage() {
         type: "error",
         text:
           error.response?.status === 404
-            ? "Backend server not found. Ensure the server is running on http://localhost:5000."
+            ? "Backend server not found. Ensure the server is running on the configured API URL."
             : error.response?.data?.error || error.message || "Sign-in failed. Please check your credentials.",
       });
     } finally {
@@ -376,6 +456,41 @@ export default function AuthPage() {
                   )}
                 </AnimatePresence>
 
+                {requiresHospital && (
+                  <div>
+                    <Label htmlFor="hospitalId">Hospital</Label>
+                    <Select
+                      value={formData.hospitalId}
+                      onValueChange={(value) => setFormData((prev) => ({ ...prev, hospitalId: value }))}
+                      disabled={hospitalLoading || hospitalOptions.length === 0}
+                    >
+                      <SelectTrigger>
+                        <SelectValue
+                          placeholder={
+                            hospitalLoading
+                              ? "Loading hospitals..."
+                              : hospitalOptions.length
+                              ? "Select hospital"
+                              : "No hospitals available"
+                          }
+                        />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {hospitalOptions.map((hospital) => {
+                          const locationParts = [hospital.city, hospital.state].filter(Boolean);
+                          const location = locationParts.length ? ` (${locationParts.join(", ")})` : "";
+                          return (
+                            <SelectItem key={hospital.id} value={hospital.id}>
+                              {hospital.name}
+                              {location}
+                            </SelectItem>
+                          );
+                        })}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+
                 <div>
                   <Label htmlFor="email">Email</Label>
                   <Input id="email" type="email" placeholder="john@example.com" value={formData.email} onChange={handleInputChange} />
@@ -417,7 +532,7 @@ export default function AuthPage() {
                         <DialogHeader>
                           <DialogTitle>Reset Password</DialogTitle>
                           <DialogDescription>
-                            Enter your email address and we'll send you a link to reset your password.
+                            Enter your email address and we&apos;ll send you a link to reset your password.
                           </DialogDescription>
                         </DialogHeader>
                         <form onSubmit={handleForgotPassword} className="space-y-4">

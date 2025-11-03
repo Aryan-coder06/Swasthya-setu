@@ -245,8 +245,8 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
 # --- Prescription analyzer contracts ---
-from app.schemas import ImageAnalysisRequest, AnalysisResponse
-from app.gemini_client import analyze_prescription_image
+from app.schemas import ImageAnalysisRequest, AnalysisResponse, StructuredPrescriptionRequest
+from app.gemini_client import analyze_prescription_image, analyze_prescription_structured
 
 # --- Chatbot contracts ---
 from app.chat_schemas import ChatMessageIn
@@ -318,6 +318,30 @@ async def analyze_image(request: ImageAnalysisRequest):
     return AnalysisResponse(
         status="success",
         message="Analysis complete and patient report generated.",
+        report=report_data,
+    )
+
+
+@app.post("/analyze-structured", response_model=AnalysisResponse)
+async def analyze_structured(request: StructuredPrescriptionRequest):
+    if not os.getenv("GEMINI_API_KEY"):
+        return AnalysisResponse(
+            status="error",
+            message="GEMINI_API_KEY is not set in ai-service/.env",
+            report=None,
+        )
+
+    report_data, status_message = analyze_prescription_structured(request)
+
+    if isinstance(report_data, dict) and "error" in report_data:
+        raise HTTPException(
+            status_code=422,
+            detail={"msg": "AI Analysis Failed", "error": report_data.get("error")},
+        )
+
+    return AnalysisResponse(
+        status="success",
+        message="Structured analysis complete and patient report generated.",
         report=report_data,
     )
 

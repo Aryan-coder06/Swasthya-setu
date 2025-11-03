@@ -11,6 +11,7 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { Toaster } from "@/components/ui/toaster";
+import { API_BASE_URL } from "@/config/env";
 
 interface WalkinTicket {
   id: number;
@@ -21,7 +22,7 @@ interface WalkinTicket {
 }
 
 export default function ReceptionistWalkinPage() {
-  const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
+  const API_BASE = API_BASE_URL;
 
   const { toast } = useToast();
   const [tickets, setTickets] = useState<WalkinTicket[]>([]);

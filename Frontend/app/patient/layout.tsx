@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, ReactNode, useRef } from "react";
+import { useState, useEffect, ReactNode, useRef, useMemo } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import Link from "next/link";
 import { motion } from "framer-motion";
@@ -21,26 +21,31 @@ function PatientLayoutUI({ children }: { children: ReactNode }) {
 
   const [selectedMenu, setSelectedMenu] = useState("dashboard");
   const [showNotifications, setShowNotifications] = useState(false);
+  const [isCollapsed, setIsCollapsed] = useState(true);
   
   // Refs for the notification dropdown and bell icon
   const notificationRef = useRef<HTMLDivElement>(null);
   const bellRef = useRef<HTMLButtonElement>(null);
 
-const menuItems = [
-  { id: "dashboard", label: "Dashboard", icon: Activity, route: "/patient" },
-  { id: "appointments", label: "Appointments", icon: Calendar, route: "/patient/appointments" },
-  { id: "records", label: "Medical Records", icon: FileText, route: "/patient/records" },
-  { id: "hospitals", label: "Find Hospitals", icon: MapPin, route: "/patient/hospitals" },
-  { id: "consultations", label: "AI Consultations", icon: Stethoscope, route: "/patient/ai-consultation" },
-  { id: "family", label: "Family Members", icon: Users, route: "/patient/family" },
-  { id: "billing", label: "Billing", icon: CreditCard, route: "/patient/billing" },
-  { id: "emergency", label: "Emergency SOS", icon: AlertCircle, route: "/patient/emergency" },
-  { id: "analyze-prescription", label: "Analyze Prescription", icon: FileText, route: "/patient/analyze-prescription" } // added here
-];
+  const menuItems = useMemo(
+    () => [
+      { id: "dashboard", label: "Dashboard", icon: Activity, route: "/patient" },
+      { id: "appointments", label: "Appointments", icon: Calendar, route: "/patient/appointments" },
+      { id: "records", label: "Medical Records", icon: FileText, route: "/patient/records" },
+      { id: "hospitals", label: "Find Hospitals", icon: MapPin, route: "/patient/hospitals" },
+      { id: "consultations", label: "AI Consultations", icon: Stethoscope, route: "/patient/ai-consultation" },
+      { id: "family", label: "Family Members", icon: Users, route: "/patient/family" },
+      { id: "billing", label: "Billing & Payments", icon: CreditCard, route: "/patient/billing" },
+      { id: "emergency", label: "Emergency SOS", icon: AlertCircle, route: "/patient/emergency" },
+      { id: "analyze-prescription", label: "Analyze Prescription", icon: FileText, route: "/patient/analyze-prescription" }
+    ],
+    []
+  );
 
-  const bottomMenuItems = [
-    { id: "profile", label: "Profile", icon: User, route: "/patient/profile" }
-  ];
+  const bottomMenuItems = useMemo(
+    () => [{ id: "profile", label: "Profile", icon: User, route: "/patient/profile" }],
+    []
+  );
 
   useEffect(() => {
     const allItems = [...menuItems, ...bottomMenuItems];
@@ -52,7 +57,7 @@ const menuItems = [
     if (activeItem) {
       setSelectedMenu(activeItem.id);
     }
-  }, [pathname]);
+  }, [pathname, menuItems, bottomMenuItems]);
 
   // Effect to handle clicks outside the notification box
   useEffect(() => {
@@ -129,58 +134,100 @@ const menuItems = [
         </motion.div>
       )}
 
-      <div className="flex">
-     <aside className="w-64 bg-white border-r border-gray-200 h-[calc(100vh-65px)] sticky top-[65px]">
-  <nav className="p-4 h-full flex flex-col justify-between">
-    <div className="space-y-2">
-      {menuItems.map((item) => (
-        <motion.button
-          key={item.id}
-          whileHover={{ scale: 1.02 }}
-          whileTap={{ scale: 0.98 }}
-          onClick={() => handleMenuClick(item.route)}
-          className={`w-full flex items-center space-x-3 px-4 py-3 rounded-lg text-left transition-colors ${
-            selectedMenu === item.id
-              ? "bg-blue-50 text-blue-600 font-semibold"
-              : "text-gray-700 hover:bg-gray-100"
+     <div className="flex">
+        <aside
+          className={`hidden md:block bg-white border-r border-gray-200 h-[calc(100vh-65px)] sticky top-[65px] transition-all duration-300 ease-out ${
+            isCollapsed ? "w-20" : "w-64"
           }`}
+          onMouseEnter={() => setIsCollapsed(false)}
+          onMouseLeave={() => setIsCollapsed(true)}
         >
-          <item.icon className="w-5 h-5" />
-          <span>{item.label}</span>
-        </motion.button>
-      ))}
+          <nav className="flex h-full flex-col justify-between px-4 py-6">
+            <div className="space-y-3">
+              <div
+                className={`flex items-center rounded-2xl border border-sky-100/80 bg-sky-50/80 px-3 py-3 text-sm font-semibold text-sky-700 shadow-inner transition-all ${
+                  isCollapsed ? "justify-center px-0" : "gap-3"
+                }`}
+              >
+                <div className="rounded-xl bg-gradient-to-br from-sky-500 to-emerald-500 p-2 text-white shadow-md shadow-sky-500/30">
+                  <Heart className="h-4 w-4" />
+                </div>
+                {!isCollapsed && (
+                  <div className="leading-tight">
+                    <p className="text-xs uppercase tracking-wide text-sky-600/80">
+                      Patient hub
+                    </p>
+                    <p className="text-sm font-semibold text-sky-700">
+                      Your health roadmap
+                    </p>
+                  </div>
+                )}
+              </div>
 
-  
-    </div>
+              <div className="space-y-1">
+                {menuItems.map((item) => {
+                  const isActive = selectedMenu === item.id;
+                  return (
+                    <motion.button
+                      key={item.id}
+                      whileHover={{ scale: 1.01 }}
+                      whileTap={{ scale: 0.99 }}
+                      onClick={() => handleMenuClick(item.route)}
+                      className={`group flex w-full items-center rounded-xl px-3 py-2 text-left transition-all ${
+                        isCollapsed ? "justify-center" : "gap-3"
+                      } ${
+                        isActive
+                          ? "bg-blue-50 text-blue-600 font-semibold shadow-sm shadow-sky-500/20"
+                          : "text-gray-700 hover:bg-gray-100"
+                      }`}
+                    >
+                      <item.icon
+                        className={`h-5 w-5 ${
+                          isActive ? "text-blue-600" : "text-gray-500 group-hover:text-blue-500"
+                        }`}
+                      />
+                      {!isCollapsed && <span>{item.label}</span>}
+                    </motion.button>
+                  );
+                })}
+              </div>
+            </div>
 
-    <div>
-      <div className="pt-4 border-t border-gray-200 space-y-2">
-        {bottomMenuItems.map((item) => (
-          <motion.button
-            key={item.id}
-            whileHover={{ scale: 1.02 }}
-            whileTap={{ scale: 0.98 }}
-            onClick={() => handleMenuClick(item.route)}
-            className={`w-full flex items-center space-x-3 px-4 py-3 rounded-lg text-left transition-colors ${
-              selectedMenu === item.id
-                ? "bg-blue-50 text-blue-600 font-semibold"
-                : "text-gray-700 hover:bg-gray-100"
-            }`}
-          >
-            <item.icon className="w-5 h-5" />
-            <span>{item.label}</span>
-          </motion.button>
-        ))}
-        <Link href="/">
-          <button className="w-full flex items-center space-x-3 px-4 py-3 rounded-lg text-left text-gray-700 hover:bg-gray-100">
-            <LogOut className="w-5 h-5" />
-            <span>Logout</span>
-          </button>
-        </Link>
-      </div>
-    </div>
-  </nav>
-</aside>
+            <div className="space-y-2 border-t border-gray-200 pt-4">
+              {bottomMenuItems.map((item) => {
+                const isActive = selectedMenu === item.id;
+                return (
+                  <motion.button
+                    key={item.id}
+                    whileHover={{ scale: 1.01 }}
+                    whileTap={{ scale: 0.99 }}
+                    onClick={() => handleMenuClick(item.route)}
+                    className={`flex w-full items-center rounded-xl px-3 py-2 transition-all ${
+                      isCollapsed ? "justify-center" : "gap-3"
+                    } ${
+                      isActive
+                        ? "bg-blue-50 text-blue-600 font-semibold shadow-sm shadow-sky-500/20"
+                        : "text-gray-700 hover:bg-gray-100"
+                    }`}
+                  >
+                    <item.icon className="h-5 w-5" />
+                    {!isCollapsed && <span>{item.label}</span>}
+                  </motion.button>
+                );
+              })}
+              <Link href="/">
+                <button
+                  className={`flex w-full items-center rounded-xl px-3 py-2 text-left text-gray-700 transition-all hover:bg-gray-100 ${
+                    isCollapsed ? "justify-center" : "gap-3"
+                  }`}
+                >
+                  <LogOut className="h-5 w-5 text-rose-500" />
+                  {!isCollapsed && <span>Logout</span>}
+                </button>
+              </Link>
+            </div>
+          </nav>
+        </aside>
 
         <main className="flex-1 p-6 bg-gray-50">{children}</main>
       </div>
@@ -196,4 +243,3 @@ export default function PatientLayout({ children }: { children: ReactNode }) {
     </ProfileProvider>
   );
 }
-
