@@ -143,7 +143,7 @@ export default function PrescriptionAnalyzerPage() {
               <Separator className="my-6" />
               
               <div>
-                <h3 className="text-md font-semibold mb-2">Doctor's Notes</h3>
+                <h3 className="text-md font-semibold mb-2">Doctor&apos;s Notes</h3>
                 <p className="text-gray-700 text-sm p-3 bg-gray-50 rounded-md border">{analysisResult.notes}</p>
               </div>
 

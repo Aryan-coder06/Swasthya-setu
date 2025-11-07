@@ -9,6 +9,7 @@ import {
 import { cn } from "@/lib/utils";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
+import { ArrowRight } from "lucide-react";
 
 type NavItem = {
   name: string;
@@ -86,20 +87,20 @@ export const FloatingNav = ({
           duration: 0.2,
         }}
         className={cn(
-          "fixed top-6 inset-x-0 mx-auto z-[5000] w-[min(100%,60rem)] px-4",
+          "fixed top-4 sm:top-6 inset-x-0 mx-auto z-[5000] w-[min(100%,60rem)] px-3 sm:px-4",
           className
         )}
       >
-        <div className="flex items-center justify-between gap-3 rounded-full border border-white/60 bg-white/85 px-5 py-3 shadow-lg shadow-cyan-500/10 backdrop-blur-xl dark:border-white/10 dark:bg-slate-900/60">
+        <div className="flex items-center justify-between gap-3 rounded-full border border-white/60 bg-white/85 px-4 py-2.5 shadow-lg shadow-cyan-500/10 backdrop-blur-xl dark:border-white/10 dark:bg-slate-900/60 sm:px-5 sm:py-3">
           <div className="flex items-center gap-3">
             {brand ? (
               <Link
                 href={brand.href ?? "#"}
-                className="flex items-center gap-2 rounded-full pr-3 transition hover:opacity-90"
+                className="flex items-center gap-2 rounded-full pr-2 sm:pr-3 transition hover:opacity-90"
               >
                 <span
                   className={cn(
-                    "grid h-9 w-9 place-items-center rounded-full bg-gradient-to-r from-cyan-500 to-emerald-500 text-white shadow-md shadow-emerald-500/40",
+                    "grid h-8 w-8 place-items-center rounded-full bg-gradient-to-r from-cyan-500 to-emerald-500 text-white shadow-md shadow-emerald-500/40 sm:h-9 sm:w-9",
                     brand.accentClassName
                   )}
                 >
@@ -128,7 +129,7 @@ export const FloatingNav = ({
                   className={cn(
                     "relative flex items-center gap-1 rounded-full px-3 py-1.5 text-sm font-medium transition-colors",
                     isActive
-                      ? "bg-cyan-50 text-cyan-700 shadow-sm shadow-cyan-500/30"
+                      ? "text-cyan-700"
                       : "text-slate-600 hover:text-cyan-600"
                   )}
                 >
@@ -139,7 +140,7 @@ export const FloatingNav = ({
                   {isActive ? (
                     <motion.span
                       layoutId="floating-nav-active-pill"
-                      className="absolute inset-0 rounded-full border border-cyan-200/60"
+                      className="pointer-events-none absolute inset-0 rounded-full border border-cyan-200/60"
                     />
                   ) : null}
                 </Link>
@@ -161,9 +162,9 @@ export const FloatingNav = ({
                     href={item.link}
                     aria-label={item.name}
                     className={cn(
-                      "grid h-10 w-10 place-items-center rounded-full border border-transparent text-slate-600 transition",
+                      "grid h-9 w-9 place-items-center rounded-full border border-transparent text-slate-600 transition sm:h-10 sm:w-10",
                       isActive
-                        ? "border-cyan-200 bg-cyan-50 text-cyan-700"
+                        ? "border-cyan-200 text-cyan-700"
                         : "hover:bg-slate-100"
                     )}
                   >
@@ -183,12 +184,23 @@ export const FloatingNav = ({
               </Button>
             ) : null}
             {cta ? (
-              <Button
-                asChild
-                className="h-10 rounded-full bg-gradient-to-r from-cyan-500 to-emerald-500 px-5 text-sm font-semibold text-white shadow-lg shadow-emerald-500/30 hover:opacity-95"
-              >
-                <Link href={cta.href}>{cta.label}</Link>
-              </Button>
+              <>
+                <Button
+                  asChild
+                  className="hidden h-10 rounded-full bg-gradient-to-r from-cyan-500 to-emerald-500 px-5 text-sm font-semibold text-white shadow-lg shadow-emerald-500/30 hover:opacity-95 sm:inline-flex"
+                >
+                  <Link href={cta.href}>{cta.label}</Link>
+                </Button>
+                <Button
+                  asChild
+                  className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-r from-cyan-500 to-emerald-500 text-white shadow-md shadow-emerald-500/40 hover:opacity-95 sm:hidden"
+                  aria-label={cta.label}
+                >
+                  <Link href={cta.href}>
+                    <ArrowRight className="h-4 w-4" />
+                  </Link>
+                </Button>
+              </>
             ) : null}
           </div>
         </div>

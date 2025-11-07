@@ -15,7 +15,11 @@ import {
   updateInvoiceStatus,
   getBedStatus,
   admitPatientToBed,
-  fetchAllDoctors
+  fetchAllDoctors,
+  listAppointmentRequests,
+  respondToAppointmentRequestController,
+  getReceptionistProfile,
+  updateReceptionistProfile,
 } from "../controllers/receptionistController.js";
 
 const router = express.Router();
@@ -24,10 +28,15 @@ router.get("/dashboard/stats", getDashboardStats);
 
 router.get("/doctors/all", fetchAllDoctors);
 
+router.get("/profile/:id", getReceptionistProfile);
+router.put("/profile/:id", updateReceptionistProfile);
+
 
 router.post("/appointments/create", createAppointment);
 router.get("/appointments/all", getAllAppointments);
 router.put("/appointments/update-status", updateAppointmentStatus);
+router.get("/appointments/requests", listAppointmentRequests);
+router.post("/appointments/requests/:id/respond", respondToAppointmentRequestController);
 
 router.post("/patients/register", registerPatient);
 router.get("/patients/all", getAllPatients);

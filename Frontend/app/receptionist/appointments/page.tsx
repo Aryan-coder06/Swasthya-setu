@@ -2,11 +2,12 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { motion } from "framer-motion";
-import { Plus, Search, Loader2, RefreshCw } from "lucide-react";
+import { Plus, Search, Loader2, RefreshCw, Clock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Select,
   SelectContent,
@@ -33,6 +34,8 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { Toaster } from "@/components/ui/toaster";
 import { API_BASE_URL } from "@/config/env";
+import { getReceptionistAppointmentRequests, respondToAppointmentRequestApi } from "@/lib/api";
+import type { AppointmentRequest } from "@/lib/types";
 
 type AppointmentStatus =
   | "confirmed"
@@ -98,8 +101,6 @@ const FORM_STATUS_OPTIONS: AppointmentStatus[] = ["confirmed", "pending"];
 const TABLE_STATUS_OPTIONS: AppointmentStatus[] = [
   "confirmed",
   "pending",
-  "waiting",
-  "in-progress",
   "completed",
   "cancelled",
 ];
@@ -140,6 +141,10 @@ export default function ReceptionistAppointmentsPage() {
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [patients, setPatients] = useState<Patient[]>([]);
   const [doctors, setDoctors] = useState<Doctor[]>([]);
+  const [receptionistId, setReceptionistId] = useState<string | null>(null);
+  const [hospitalId, setHospitalId] = useState<string | null>(null);
+  const [appointmentRequests, setAppointmentRequests] = useState<AppointmentRequest[]>([]);
+  const [requestsLoading, setRequestsLoading] = useState(false);
 
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
@@ -155,6 +160,15 @@ export default function ReceptionistAppointmentsPage() {
   const [appointmentTime, setAppointmentTime] = useState("");
   const [appointmentStatus, setAppointmentStatus] =
     useState<AppointmentStatus>("confirmed");
+  const [respondDialogOpen, setRespondDialogOpen] = useState(false);
+  const [currentRequest, setCurrentRequest] = useState<AppointmentRequest | null>(null);
+  const [responseMode, setResponseMode] = useState<"accept" | "decline">("accept");
+  const [selectedRequestDoctor, setSelectedRequestDoctor] = useState("");
+  const [selectedRequestDate, setSelectedRequestDate] = useState("");
+  const [selectedRequestTime, setSelectedRequestTime] = useState("");
+  const [declineReason, setDeclineReason] = useState("");
+  const [requestNotes, setRequestNotes] = useState("");
+  const [responding, setResponding] = useState(false);
 
   const resetForm = () => {
     setSelectedPatientId(NEW_PATIENT_VALUE);
@@ -167,9 +181,14 @@ export default function ReceptionistAppointmentsPage() {
 
   /* ------------------- FETCH APPOINTMENTS ------------------- */
   const fetchAppointments = useCallback(async () => {
+    if (!hospitalId && !receptionistId) return;
     setLoading(true);
     try {
-      const res = await fetch(`${API_BASE}/receptionist/appointments/all`, {
+      const params = new URLSearchParams();
+      if (hospitalId) params.set("hospitalId", hospitalId);
+      if (!hospitalId && receptionistId) params.set("receptionistId", receptionistId);
+      const query = params.toString() ? `?${params.toString()}` : "";
+      const res = await fetch(`${API_BASE}/receptionist/appointments/all${query}`, {
         cache: "no-store",
       });
       if (!res.ok) {
@@ -188,12 +207,13 @@ export default function ReceptionistAppointmentsPage() {
     } finally {
       setLoading(false);
     }
-  }, [API_BASE, toast]);
+  }, [API_BASE, toast, hospitalId, receptionistId]);
 
   /* ------------------- FETCH DOCTORS & PATIENTS ------------------- */
   const fetchDoctors = useCallback(async () => {
+    if (!hospitalId) return;
     try {
-      const res = await fetch(`${API_BASE}/receptionist/doctors/all`, {
+      const res = await fetch(`${API_BASE}/receptionist/doctors/all?hospitalId=${encodeURIComponent(hospitalId)}`, {
         cache: "no-store",
       });
       if (!res.ok) {
@@ -211,11 +231,12 @@ export default function ReceptionistAppointmentsPage() {
       });
       setDoctors([]);
     }
-  }, [API_BASE, toast]);
+  }, [API_BASE, toast, hospitalId]);
 
   const fetchPatients = useCallback(async () => {
+    if (!hospitalId) return;
     try {
-      const res = await fetch(`${API_BASE}/receptionist/patients/all`, {
+      const res = await fetch(`${API_BASE}/receptionist/patients/all?hospitalId=${encodeURIComponent(hospitalId)}`, {
         cache: "no-store",
       });
       if (!res.ok) {
@@ -233,13 +254,66 @@ export default function ReceptionistAppointmentsPage() {
       });
       setPatients([]);
     }
-  }, [API_BASE, toast]);
+  }, [API_BASE, toast, hospitalId]);
+
+  const fetchAppointmentRequests = useCallback(async () => {
+    if (!receptionistId) return;
+    setRequestsLoading(true);
+    try {
+      const response = await getReceptionistAppointmentRequests({
+        receptionistId,
+        status: "pending",
+      });
+      setAppointmentRequests(response.requests);
+      if (!hospitalId && response.hospital?.id) {
+        setHospitalId(response.hospital.id);
+      }
+    } catch (err: any) {
+      console.error("Failed to load appointment requests", err);
+      toast({
+        title: "Unable to load pending requests",
+        description: err?.message || "Please try again later.",
+        variant: "destructive",
+      });
+      setAppointmentRequests([]);
+    } finally {
+      setRequestsLoading(false);
+    }
+  }, [receptionistId, toast, hospitalId]);
 
   useEffect(() => {
-    fetchAppointments();
-    fetchDoctors();
-    fetchPatients();
-  }, [fetchAppointments, fetchDoctors, fetchPatients]);
+    const storedUser = typeof window !== "undefined" ? localStorage.getItem("user") : null;
+    if (!storedUser) return;
+    try {
+      const parsed = JSON.parse(storedUser);
+      if (parsed?.id) {
+        setReceptionistId(parsed.id);
+      }
+      const hosp = parsed?.hospitalId ?? parsed?.hospital_id ?? null;
+      if (hosp) {
+        setHospitalId(hosp);
+      }
+    } catch (error) {
+      console.error("Failed to parse receptionist info", error);
+    }
+  }, []);
+
+useEffect(() => {
+  if (!hospitalId && !receptionistId) return;
+  fetchAppointments();
+  fetchDoctors();
+  fetchPatients();
+}, [fetchAppointments, fetchDoctors, fetchPatients, hospitalId, receptionistId]);
+
+useEffect(() => {
+  fetchAppointmentRequests();
+}, [fetchAppointmentRequests]);
+
+useEffect(() => {
+  if (doctors.length && !selectedRequestDoctor) {
+    setSelectedRequestDoctor(doctors[0].id);
+  }
+}, [doctors, selectedRequestDoctor]);
 
   /* ------------------- FILTERED LIST ------------------- */
   const filteredAppointments = useMemo(() => {
@@ -388,6 +462,64 @@ export default function ReceptionistAppointmentsPage() {
       {STATUS_LABELS[status] ?? status}
     </Badge>
   );
+
+  const openRequestDialog = (request: AppointmentRequest, mode: "accept" | "decline") => {
+    setCurrentRequest(request);
+    setResponseMode(mode);
+    setSelectedRequestDoctor("");
+    setSelectedRequestDate(request.preferred_date ?? "");
+    setSelectedRequestTime(request.preferred_time ?? "");
+    setDeclineReason("");
+    setRequestNotes(request.notes ?? "");
+    setRespondDialogOpen(true);
+  };
+
+  const handleRespondToRequest = async () => {
+    if (!currentRequest || !receptionistId) return;
+    try {
+      setResponding(true);
+      if (responseMode === "accept") {
+        if (!selectedRequestDoctor || !selectedRequestDate || !selectedRequestTime) {
+          toast({
+            title: "Missing details",
+            description: "Select doctor, date, and time before confirming.",
+            variant: "destructive",
+          });
+          return;
+        }
+      }
+
+      await respondToAppointmentRequestApi({
+        requestId: currentRequest.id,
+        action: responseMode,
+        receptionistId,
+        doctorId: responseMode === "accept" ? selectedRequestDoctor : undefined,
+        appointmentDate: responseMode === "accept" ? selectedRequestDate : undefined,
+        appointmentTime: responseMode === "accept" ? selectedRequestTime : undefined,
+        declineReason: responseMode === "decline" ? declineReason : undefined,
+        notes: requestNotes || undefined,
+      });
+
+      toast({
+        title: responseMode === "accept" ? "Appointment confirmed" : "Request declined",
+        description:
+          responseMode === "accept"
+            ? "Doctor and patient have been notified."
+            : "Patient has been informed.",
+      });
+
+      setRespondDialogOpen(false);
+      await Promise.all([fetchAppointmentRequests(), fetchAppointments()]);
+    } catch (error: any) {
+      toast({
+        title: "Unable to update request",
+        description: error?.message || "Please try again later.",
+        variant: "destructive",
+      });
+    } finally {
+      setResponding(false);
+    }
+  };
 
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-6">
@@ -548,6 +680,71 @@ export default function ReceptionistAppointmentsPage() {
         </div>
       </div>
 
+      {/* Pending requests */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Clock className="w-5 h-5 text-purple-600" />
+              <h2 className="text-lg font-semibold">Pending Appointment Requests</h2>
+            </div>
+            <div className="text-sm text-slate-500">
+              {requestsLoading ? "Loading…" : `${appointmentRequests.length} awaiting action`}
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent>
+          {requestsLoading ? (
+            <div className="flex justify-center py-6">
+              <Loader2 className="w-5 h-5 animate-spin text-purple-600" />
+            </div>
+          ) : appointmentRequests.length === 0 ? (
+            <p className="text-sm text-slate-500">
+              There are no pending requests for your hospital. Patients will appear here once they book a slot.
+            </p>
+          ) : (
+            <div className="space-y-3">
+              {appointmentRequests.map((request) => (
+                <div
+                  key={request.id}
+                  className="p-4 border rounded-lg flex flex-col gap-2 md:flex-row md:items-center md:justify-between"
+                >
+                  <div>
+                    <p className="text-sm font-semibold text-slate-900">
+                      {request.patient_name || "Patient"}
+                    </p>
+                    <p className="text-xs text-slate-500">
+                      Preferred: {request.preferred_date ?? "Any day"} · {request.preferred_time ?? "Any time"}
+                    </p>
+                    {request.notes && (
+                      <p className="text-xs text-slate-500 mt-1 truncate">
+                        Notes: {request.notes}
+                      </p>
+                    )}
+                  </div>
+                  <div className="flex gap-2">
+                    <Button
+                      size="sm"
+                      className="bg-emerald-600 hover:bg-emerald-700"
+                      onClick={() => openRequestDialog(request, "accept")}
+                    >
+                      Accept
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => openRequestDialog(request, "decline")}
+                    >
+                      Decline
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
       {/* Search & Table */}
       <Card>
         <CardHeader>
@@ -635,6 +832,94 @@ export default function ReceptionistAppointmentsPage() {
           )}
         </CardContent>
       </Card>
+
+      <Dialog open={respondDialogOpen} onOpenChange={setRespondDialogOpen}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>
+              {responseMode === "accept" ? "Confirm appointment details" : "Decline appointment request"}
+            </DialogTitle>
+          </DialogHeader>
+          {responseMode === "accept" ? (
+            <div className="space-y-4 py-2">
+              <div>
+                <Label>Assign doctor</Label>
+                <Select
+                  value={selectedRequestDoctor}
+                  onValueChange={setSelectedRequestDoctor}
+                >
+                  <SelectTrigger className="mt-1">
+                    <SelectValue placeholder="Select doctor" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {doctors.length === 0 && <SelectItem value="" disabled>No doctors found</SelectItem>}
+                    {doctors.map((doctor) => (
+                      <SelectItem key={doctor.id} value={doctor.id}>
+                        Dr. {doctor.firstName ?? ""} {doctor.lastName ?? ""}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <Label htmlFor="request-date">Date</Label>
+                  <Input
+                    id="request-date"
+                    type="date"
+                    value={selectedRequestDate}
+                    onChange={(event) => setSelectedRequestDate(event.target.value)}
+                    className="mt-1"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="request-time">Time</Label>
+                  <Input
+                    id="request-time"
+                    type="time"
+                    value={selectedRequestTime}
+                    onChange={(event) => setSelectedRequestTime(event.target.value)}
+                    className="mt-1"
+                  />
+                </div>
+              </div>
+              <div>
+                <Label htmlFor="request-notes">Notes (optional)</Label>
+                <Textarea
+                  id="request-notes"
+                  value={requestNotes}
+                  onChange={(event) => setRequestNotes(event.target.value)}
+                  placeholder="Additional info to share with patient or doctor"
+                />
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-4 py-2">
+              <div>
+                <Label htmlFor="decline-reason">Reason</Label>
+                <Textarea
+                  id="decline-reason"
+                  value={declineReason}
+                  onChange={(event) => setDeclineReason(event.target.value)}
+                  placeholder="Explain why this request cannot be scheduled."
+                />
+              </div>
+            </div>
+          )}
+          <div className="flex justify-end gap-2 pt-2">
+            <Button
+              variant="outline"
+              onClick={() => setRespondDialogOpen(false)}
+              disabled={responding}
+            >
+              Cancel
+            </Button>
+            <Button onClick={handleRespondToRequest} disabled={responding}>
+              {responding ? "Saving..." : responseMode === "accept" ? "Confirm" : "Decline"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <Toaster />
     </motion.div>

@@ -1,8 +1,19 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { motion } from "framer-motion";
-import { CreditCard, Plus, Search, Printer, Loader2, RefreshCw, Trash2 } from "lucide-react";
+import {
+  CreditCard,
+  Plus,
+  Search,
+  Printer,
+  Loader2,
+  RefreshCw,
+  Trash2,
+  IndianRupee,
+  Wallet,
+  PiggyBank,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -46,6 +57,7 @@ export default function ReceptionistBillingPage() {
   const [showModal, setShowModal] = useState(false);
   const [formLoading, setFormLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
+  const [statusFilter, setStatusFilter] = useState<"all" | "pending" | "paid">("all");
 
   // Form state
   const [patientName, setPatientName] = useState("");
@@ -150,19 +162,144 @@ export default function ReceptionistBillingPage() {
   };
 
   /* ------------------- FILTER INVOICES ------------------- */
-  const filteredInvoices = invoices.filter(
-    (inv) =>
-      inv.invoice_number.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      inv.patient_name.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const filteredInvoices = useMemo(() => {
+    const term = searchTerm.trim().toLowerCase();
+    return invoices.filter((inv) => {
+      const matchesTerm =
+        inv.invoice_number.toLowerCase().includes(term) ||
+        inv.patient_name.toLowerCase().includes(term);
+      const matchesStatus = statusFilter === "all" ? true : inv.status === statusFilter;
+      return matchesTerm && matchesStatus;
+    });
+  }, [invoices, searchTerm, statusFilter]);
+
+  const summary = useMemo(() => {
+    const totalAmount = invoices.reduce((sum, inv) => sum + (inv.amount || 0), 0);
+    const pending = invoices.filter((inv) => inv.status === "pending");
+    const paid = invoices.filter((inv) => inv.status === "paid");
+    const pendingAmount = pending.reduce((sum, inv) => sum + (inv.amount || 0), 0);
+    const paidAmount = paid.reduce((sum, inv) => sum + (inv.amount || 0), 0);
+    return {
+      totalInvoices: invoices.length,
+      pendingInvoices: pending.length,
+      paidInvoices: paid.length,
+      totalAmount,
+      pendingAmount,
+      paidAmount,
+    };
+  }, [invoices]);
+
+  const formatCurrency = (value: number | undefined) =>
+    `₹${(value ?? 0).toLocaleString("en-IN", { maximumFractionDigits: 0 })}`;
+
+  const statusBadge = (status: Invoice["status"]) => {
+    const classes =
+      status === "paid"
+        ? "bg-emerald-100 text-emerald-700 border border-emerald-200"
+        : "bg-amber-100 text-amber-800 border border-amber-200";
+    return (
+      <Badge className={classes} variant="outline">
+        {status}
+      </Badge>
+    );
+  };
+
+  const displayedServices = (lineItems: Invoice["services"]) => {
+    if (!lineItems || !lineItems.length) {
+      return <span className="text-slate-400 text-sm">No services listed</span>;
+    }
+    if (typeof lineItems[0] === "string") {
+      return <span className="text-sm text-slate-600 line-clamp-2">{lineItems.join(", ")}</span>;
+    }
+    const typed = lineItems as Service[];
+    if (typed.length === 1) {
+      return (
+        <span className="text-sm text-slate-600">
+          {typed[0].name} · {formatCurrency(typed[0].amount)}
+        </span>
+      );
+    }
+    return (
+      <span className="text-sm text-slate-600">
+        {typed[0].name} · {formatCurrency(typed[0].amount)}{" "}
+        <span className="text-xs text-slate-400">(+{typed.length - 1} more)</span>
+      </span>
+    );
+  };
+
+  const handlePrintInvoice = (invoice: Invoice) => {
+    const printWindow = window.open("", "_blank", "width=640,height=840");
+    if (!printWindow) {
+      toast({
+        title: "Popup blocked",
+        description: "Allow popups to print the receipt.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const servicesMarkup = Array.isArray(invoice.services)
+      ? invoice.services
+          .map((service) =>
+            typeof service === "string"
+              ? `<li>${service}</li>`
+              : `<li>${service.name} — ${formatCurrency(service.amount)}</li>`
+          )
+          .join("")
+      : "";
+
+    printWindow.document.write(`
+      <html>
+        <head>
+          <title>${invoice.invoice_number}</title>
+          <style>
+            body { font-family: "Inter", sans-serif; padding: 24px; color: #0f172a; }
+            h1 { font-size: 20px; margin-bottom: 8px; }
+            .meta { margin-bottom: 12px; font-size: 14px; }
+            .meta span { display: block; margin-bottom: 4px; }
+            ul { padding-left: 20px; line-height: 1.4; }
+            .amount { font-size: 18px; font-weight: 600; margin-top: 16px; }
+          </style>
+        </head>
+        <body>
+          <h1>SwasthyaSetu Invoice</h1>
+          <div class="meta">
+            <span><strong>Invoice #:</strong> ${invoice.invoice_number}</span>
+            <span><strong>Patient:</strong> ${invoice.patient_name}</span>
+            <span><strong>Status:</strong> ${invoice.status.toUpperCase()}</span>
+            <span><strong>Issued on:</strong> ${new Date(invoice.created_at).toLocaleString()}</span>
+            ${
+              invoice.paid_at
+                ? `<span><strong>Paid on:</strong> ${new Date(invoice.paid_at).toLocaleString()}</span>`
+                : ""
+            }
+          </div>
+          ${
+            servicesMarkup
+              ? `<strong>Services</strong><ul>${servicesMarkup}</ul>`
+              : "<em>No itemised services captured</em>"
+          }
+          <div class="amount">Amount Due: ${formatCurrency(invoice.amount)}</div>
+        </body>
+      </html>
+    `);
+    printWindow.document.close();
+    printWindow.focus();
+    printWindow.print();
+  };
 
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-6">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-        <h1 className="text-3xl font-bold text-gray-900">Billing & Payments</h1>
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+        <div>
+          <h1 className="text-3xl font-bold text-gray-900">Billing & Payments</h1>
+          <p className="text-sm text-gray-500 mt-1">
+            Track open dues, raise receipts, and settle payments for your hospital.
+          </p>
+        </div>
 
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap">
           <Button variant="outline" size="sm" onClick={fetchInvoices} disabled={loading}>
             <RefreshCw className={`w-4 h-4 mr-1 ${loading ? "animate-spin" : ""}`} />
             Refresh
@@ -264,88 +401,167 @@ export default function ReceptionistBillingPage() {
         </div>
       </div>
 
+      {/* Summary */}
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+        {[
+          {
+            title: "Total invoices",
+            primary: summary.totalInvoices,
+            secondary: formatCurrency(summary.totalAmount),
+            icon: CreditCard,
+            accent: "bg-slate-100 text-slate-800",
+          },
+          {
+            title: "Pending payments",
+            primary: summary.pendingInvoices,
+            secondary: formatCurrency(summary.pendingAmount),
+            icon: Wallet,
+            accent: "bg-amber-100 text-amber-900",
+          },
+          {
+            title: "Collected",
+            primary: summary.paidInvoices,
+            secondary: formatCurrency(summary.paidAmount),
+            icon: IndianRupee,
+            accent: "bg-emerald-100 text-emerald-900",
+          },
+          {
+            title: "Avg. ticket size",
+            primary: invoices.length
+              ? `₹${Math.round(summary.totalAmount / Math.max(invoices.length, 1)).toLocaleString()}`
+              : "₹0",
+            secondary: "Across all invoices",
+            icon: PiggyBank,
+            accent: "bg-indigo-100 text-indigo-900",
+          },
+        ].map((card) => (
+          <motion.div
+            key={card.title}
+            whileHover={{ scale: 1.01 }}
+            className="rounded-xl border bg-white p-4 flex items-center justify-between shadow-sm"
+          >
+            <div>
+              <p className="text-xs uppercase tracking-wide text-slate-500">{card.title}</p>
+              <p className="text-2xl font-semibold text-slate-900 mt-1">{card.primary}</p>
+              <p className="text-sm text-slate-500">{card.secondary}</p>
+            </div>
+            <div className={`p-3 rounded-full ${card.accent}`}>
+              <card.icon className="h-5 w-5" />
+            </div>
+          </motion.div>
+        ))}
+      </div>
+
       {/* Search & Table */}
       <Card>
         <CardHeader>
-          <div className="relative">
-            <Search className="w-4 h-4 absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
-            <Input
-              placeholder="Search by invoice ID or patient name..."
-              className="pl-10"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-            />
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+            <div className="relative w-full lg:w-1/2">
+              <Search className="w-4 h-4 absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
+              <Input
+                placeholder="Search by invoice ID or patient name..."
+                className="pl-10"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+              />
+            </div>
+            <div className="flex gap-2 flex-wrap">
+              {(["all", "pending", "paid"] as Array<"all" | "pending" | "paid">).map((status) => (
+                <Button
+                  key={status}
+                  variant={statusFilter === status ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setStatusFilter(status)}
+                >
+                  {status === "all" ? "All" : status.charAt(0).toUpperCase() + status.slice(1)}
+                  {status !== "all" && (
+                    <Badge className="ml-2" variant="secondary">
+                      {status === "pending" ? summary.pendingInvoices : summary.paidInvoices}
+                    </Badge>
+                  )}
+                </Button>
+              ))}
+            </div>
           </div>
         </CardHeader>
         <CardContent>
           {loading ? (
-            <div className="flex items-center justify-center py-8">
+            <div className="flex items-center justify-center py-10">
               <Loader2 className="w-6 h-6 animate-spin text-purple-600" />
-              <span className="ml-2">Loading invoices...</span>
+              <span className="ml-2 text-slate-500">Loading invoices…</span>
             </div>
           ) : error ? (
-            <div className="text-center py-8 text-red-600">
+            <div className="text-center py-10 text-red-600">
               <p className="font-medium">Error: {error}</p>
-              <Button onClick={fetchInvoices} size="sm" className="mt-2">
+              <Button onClick={fetchInvoices} size="sm" className="mt-3">
                 Retry
               </Button>
             </div>
           ) : filteredInvoices.length === 0 ? (
-            <p className="text-center py-8 text-gray-500">No invoices found.</p>
+            <div className="py-10 text-center text-slate-500">
+              {invoices.length === 0
+                ? "No invoices recorded yet. Create your first invoice to populate this view."
+                : "No invoices match the selected filters."}
+            </div>
           ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Invoice ID</TableHead>
-                  <TableHead>Patient</TableHead>
-                  <TableHead>Services</TableHead>
-                  <TableHead>Amount</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filteredInvoices.map((inv) => (
-                  <TableRow key={inv.id}>
-                    <TableCell className="font-medium">{inv.invoice_number}</TableCell>
-                    <TableCell>{inv.patient_name}</TableCell>
-                    <TableCell>
-                      <div className="text-xs space-y-1">
-                        {inv.services.map((s, i) => (
-                          <div key={i}>
-                            **{s.name}: ₹{(s.amount ?? 0).toLocaleString()}** // FIX APPLIED HERE                          
-                        </div>
-                        ))}
-                      </div>
-                    </TableCell>
-                    <TableCell className="font-semibold">₹{inv.amount.toLocaleString()}</TableCell>
-                    <TableCell>
-                      <Badge
-                        className={
-                          inv.status === "paid"
-                            ? "bg-green-100 text-green-800"
-                            : "bg-yellow-100 text-yellow-800"
-                        }
-                      >
-                        {inv.status}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="text-right space-x-2">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleStatusUpdate(inv.id, inv.status === "paid" ? "pending" : "paid")}
-                      >
-                        {inv.status === "paid" ? "Unmark" : "Mark Paid"}
-                      </Button>
-                      <Button size="sm">
-                        <Printer className="w-4 h-4" />
-                      </Button>
-                    </TableCell>
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Invoice ID</TableHead>
+                    <TableHead>Patient</TableHead>
+                    <TableHead>Services</TableHead>
+                    <TableHead>Amount</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                </TableHeader>
+                <TableBody>
+                  {filteredInvoices.map((inv) => (
+                    <TableRow key={inv.id}>
+                      <TableCell className="font-medium">{inv.invoice_number}</TableCell>
+                      <TableCell>
+                        <p className="font-semibold text-slate-900">{inv.patient_name}</p>
+                        <p className="text-xs text-slate-500">
+                          {new Date(inv.created_at).toLocaleDateString()}
+                        </p>
+                      </TableCell>
+                      <TableCell>{displayedServices(inv.services)}</TableCell>
+                      <TableCell className="font-semibold">{formatCurrency(inv.amount)}</TableCell>
+                      <TableCell>{statusBadge(inv.status)}</TableCell>
+                      <TableCell>
+                        <div className="flex justify-end gap-2">
+                          {inv.status === "pending" ? (
+                            <Button
+                              size="sm"
+                              className="bg-emerald-600 hover:bg-emerald-700"
+                              onClick={() => handleStatusUpdate(inv.id, "paid")}
+                            >
+                              Mark Paid
+                            </Button>
+                          ) : (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => handleStatusUpdate(inv.id, "pending")}
+                            >
+                              Unmark
+                            </Button>
+                          )}
+                          <Button
+                            size="icon"
+                            variant="outline"
+                            onClick={() => handlePrintInvoice(inv)}
+                          >
+                            <Printer className="w-4 h-4" />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
           )}
         </CardContent>
       </Card>

@@ -101,7 +101,6 @@ const create_appointment = async (
       patient_id: resolvedPatientId,
       patient_name: resolvedPatientName,
       doctor_id: doctorProfile.doctorId,
-      doctor_name: doctorProfile.doctorName,
       appointment_date: appointmentDate,
       appointment_time: appointmentTime,
       start_at: startIso,
@@ -119,18 +118,24 @@ const create_appointment = async (
   return { data: data[0] };
 };
 
-const get_all_appointments = async () => {
+const get_all_appointments = async (hospitalId = null) => {
   await autoCompleteExpiredAppointments();
 
-  const { data, error } = await supabase
+  let query = supabase
     .from("appointments")
     .select(`
       *,
-      doctor:Doctor_Profile(id, firstName, lastName),
+      doctor:Doctor_Profile(id, firstName, lastName, hospital_id, hospital_name),
       patient:Patient_Profile(id, firstName, lastName)
     `)
     .order("start_at", { ascending: true })
     .order("appointment_date", { ascending: true });
+
+  if (hospitalId) {
+    query = query.eq("doctor.hospital_id", hospitalId);
+  }
+
+  const { data, error } = await query;
 
   if (error) {
     console.error("Get appointments error:", error);
@@ -176,17 +181,71 @@ const register_patient = async (patientData) => {
   return { data: data[0] };
 };
 
-const get_all_patients = async () => {
+const getDoctorIdsForHospital = async (hospitalId) => {
   const { data, error } = await supabase
-    .from("Patient_Profile")
-    .select('*')
-    .order('created_at', { ascending: false });
+    .from("Doctor_Profile")
+    .select("id")
+    .eq("hospital_id", hospitalId);
+
+  if (error) {
+    console.error("Fetch doctors for hospital error:", error);
+    return { error: error.message, doctorIds: [] };
+  }
+
+  const doctorIds = (data ?? [])
+    .map((row) => row.id)
+    .filter((id) => isUUID(id));
+
+  return { doctorIds };
+};
+
+const get_all_patients = async (hospitalId) => {
+  if (!hospitalId) {
+    return { error: "hospitalId is required" };
+  }
+
+  const { doctorIds, error: doctorError } = await getDoctorIdsForHospital(hospitalId);
+  if (doctorError) {
+    return { error: doctorError };
+  }
+
+  if (!doctorIds.length) {
+    return { data: [] };
+  }
+
+  const { data, error } = await supabase
+    .from("appointments")
+    .select(`
+      patient:Patient_Profile (
+        id,
+        firstName,
+        lastName,
+        email,
+        phone_no,
+        gender,
+        age,
+        created_at
+      ),
+      doctor_id
+    `)
+    .in("doctor_id", doctorIds)
+    .not("patient_id", "is", null);
 
   if (error) {
     console.error("Get patients error:", error);
     return { error: error.message };
   }
-  return { data };
+
+  const unique = [];
+  const seen = new Set();
+  (data || []).forEach((row) => {
+    const patient = row.patient;
+    if (patient?.id && !seen.has(patient.id)) {
+      seen.add(patient.id);
+      unique.push(patient);
+    }
+  });
+  return { data: unique };
 };
 
 const search_patients = async (searchTerm) => {
@@ -202,39 +261,55 @@ const search_patients = async (searchTerm) => {
   return { data };
 };
 
-const create_walkin_ticket = async (patientName) => {
-  const today = new Date().toISOString().split('T')[0];
-  
-  const { data: lastTicket } = await supabase
-    .from("walkin_tickets")
-    .select('ticket_number')
-    .gte('created_at', `${today}T00:00:00`)
-    .order('ticket_number', { ascending: false })
-    .limit(1);
+const extractTicketSuffix = (ticketNumber = "") => {
+  const suffix = ticketNumber.substring(1);
+  const parsed = parseInt(suffix, 10);
+  return Number.isNaN(parsed) ? null : parsed;
+};
 
-  let nextNumber = 1;
-  if (lastTicket && lastTicket.length > 0) {
-    const lastNum = parseInt(lastTicket[0].ticket_number.substring(1));
-    nextNumber = lastNum + 1;
+const create_walkin_ticket = async (patientName) => {
+  const { data: allTickets, error: ticketsError } = await supabase
+    .from("walkin_tickets")
+    .select("ticket_number");
+
+  if (ticketsError) {
+    console.error("Fetch walk-in tickets error:", ticketsError);
+    return { error: ticketsError.message };
   }
 
-  const ticketNumber = `A${String(nextNumber).padStart(2, '0')}`;
+  const issuedNumbers = (allTickets ?? [])
+    .map((row) => extractTicketSuffix(row.ticket_number))
+    .filter((val) => typeof val === "number");
 
-  const { data, error } = await supabase
-    .from("walkin_tickets")
-    .insert([{
-      ticket_number: ticketNumber,
-      patient_name: patientName || 'Anonymous Patient',
-      status: 'waiting',
-      created_at: new Date().toISOString()
-    }])
-    .select();
+  let nextNumber = issuedNumbers.length ? Math.max(...issuedNumbers) + 1 : 1;
+  const maxAttempts = 50;
 
-  if (error) {
+  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+    const ticketNumber = `A${String(nextNumber).padStart(2, "0")}`;
+    const { data, error } = await supabase
+      .from("walkin_tickets")
+      .insert([{
+        ticket_number: ticketNumber,
+        patient_name: patientName || "Anonymous Patient",
+        status: "waiting",
+        created_at: new Date().toISOString(),
+      }])
+      .select();
+
+    if (!error) {
+      return { data: data[0] };
+    }
+
+    if (error.code === "23505") {
+      nextNumber += 1;
+      continue;
+    }
+
     console.error("Create walk-in ticket error:", error);
     return { error: error.message };
   }
-  return { data: data[0] };
+
+  return { error: "Unable to generate unique ticket number. Please try again." };
 };
 
 const get_today_walkin_tickets = async () => {

@@ -6,6 +6,10 @@ import {
     book_patient_appointment,
 } from "../models/patient.js";
 import { createPrescriptionReport, listPrescriptionReports } from "../models/prescriptions.js";
+import {
+    createAppointmentRequest,
+    listAppointmentRequestsForPatient,
+} from "../models/appointment_requests.js";
 
 const addPatientProfile = async (req, res) => {
     try {
@@ -189,6 +193,72 @@ const bookPatientAppointmentHandler = async (req, res) => {
     }
 };
 
+const createAppointmentRequestHandler = async (req, res) => {
+    try {
+        const {
+            patientId,
+            hospitalId,
+            doctorId,
+            preferredSpecialty,
+            preferredDate,
+            preferredTime,
+            notes,
+        } = req.body ?? {};
+
+        if (!patientId || !hospitalId) {
+            return res.status(400).json({
+                error: "patientId and hospitalId are required",
+            });
+        }
+
+        const { data, error } = await createAppointmentRequest({
+            patientId,
+            hospitalId,
+            doctorId,
+            preferredSpecialty,
+            preferredDate,
+            preferredTime,
+            notes,
+        });
+
+        if (error || !data) {
+            const message = error?.message || "Failed to submit appointment request.";
+            return res.status(400).json({ error: message });
+        }
+
+        return res.status(201).json({
+            message: "Appointment request submitted successfully.",
+            data,
+        });
+    } catch (error) {
+        console.error("Error creating appointment request:", error);
+        return res.status(500).json({
+            error: error?.message || "Failed to create appointment request.",
+        });
+    }
+};
+
+const listAppointmentRequestsForPatientHandler = async (req, res) => {
+    try {
+        const patientId = req.body?.patientId || req.query?.patientId;
+        if (!patientId) {
+            return res.status(400).json({ error: "patientId is required" });
+        }
+
+        const { data, error } = await listAppointmentRequestsForPatient(patientId);
+        if (error) {
+            throw error;
+        }
+
+        return res.status(200).json({ data });
+    } catch (error) {
+        console.error("Error fetching appointment requests for patient:", error);
+        return res.status(500).json({
+            error: error?.message || "Failed to load appointment requests.",
+        });
+    }
+};
+
 export {
     addPatientProfile,
     getPatientProfile,
@@ -197,4 +267,6 @@ export {
     getPrescriptionReports,
     listPatientAppointmentsHandler,
     bookPatientAppointmentHandler,
+    createAppointmentRequestHandler,
+    listAppointmentRequestsForPatientHandler,
 };

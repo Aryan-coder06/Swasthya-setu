@@ -17,6 +17,14 @@ import {
   get_dashboard_stats
 } from "../models/receptionist_models.js";
 import supabase from "../main_server.js";
+import {
+  listAppointmentRequestsForHospital,
+  respondToAppointmentRequest,
+} from "../models/appointment_requests.js";
+import {
+  get_receptionist_profile_by_id,
+  update_receptionist_profile,
+} from "../models/receptionist.js";
 const getDashboardStats = async (req, res) => {
   try {
     const { data, error } = await get_dashboard_stats();
@@ -59,15 +67,73 @@ const createAppointment = async (req, res) => {
   }
 };
 
+const getReceptionistProfile = async (req, res) => {
+  try {
+    const receptionistId = req.params?.id || req.query?.id || req.body?.id;
+    if (!receptionistId) {
+      return res.status(400).json({ error: "receptionist id is required" });
+    }
+
+    const { data, error } = await get_receptionist_profile_by_id(receptionistId);
+    if (error) {
+      return res.status(404).json({ error: "Receptionist profile not found." });
+    }
+
+    return res.status(200).json({ data });
+  } catch (error) {
+    console.error("Get receptionist profile error:", error);
+    return res.status(500).json({ error: "Failed to load profile." });
+  }
+};
+
+const updateReceptionistProfile = async (req, res) => {
+  try {
+    const receptionistId = req.params?.id || req.body?.id;
+    if (!receptionistId) {
+      return res.status(400).json({ error: "receptionist id is required" });
+    }
+
+    const { data, error } = await update_receptionist_profile(receptionistId, req.body ?? {});
+    if (error) {
+      return res.status(400).json({ error: error.message || "Failed to update profile." });
+    }
+
+    return res.status(200).json({ message: "Profile updated successfully.", data });
+  } catch (error) {
+    console.error("Update receptionist profile error:", error);
+    return res.status(500).json({ error: "Failed to update profile." });
+  }
+};
+
 
 const getAllAppointments = async (req, res) => {
   try {
-    const { data, error } = await get_all_appointments();
-    
+    let hospitalId = req.query?.hospitalId || req.body?.hospitalId || null;
+    const receptionistId = req.query?.receptionistId || req.body?.receptionistId || null;
+
+    if (!hospitalId && receptionistId) {
+      const { data: profile, error: profileError } = await supabase
+        .from("receptionist_profile")
+        .select("hospital_id")
+        .eq("id", receptionistId)
+        .maybeSingle();
+
+      if (profileError) {
+        console.error("Receptionist profile lookup failed:", profileError);
+      }
+      hospitalId = profile?.hospital_id ?? null;
+    }
+
+    if (!hospitalId) {
+      return res.status(400).json({ error: "hospitalId is required to view appointments." });
+    }
+
+    const { data, error } = await get_all_appointments(hospitalId);
+
     if (error) {
       return res.status(400).json({ error });
     }
-    
+
     res.status(200).json(data);
   } catch (error) {
     console.error("Get appointments error:", error);
@@ -75,20 +141,26 @@ const getAllAppointments = async (req, res) => {
   }
 };
 
+const ALLOWED_APPOINTMENT_STATUSES = new Set(["pending", "confirmed", "completed", "cancelled"]);
+
 const updateAppointmentStatus = async (req, res) => {
   try {
     const { appointmentId, status } = req.body;
-    
+
     if (!appointmentId || !status) {
       return res.status(400).json({ error: "Appointment ID and status are required" });
     }
 
+    if (!ALLOWED_APPOINTMENT_STATUSES.has(status)) {
+      return res.status(400).json({ error: `Status must be one of ${Array.from(ALLOWED_APPOINTMENT_STATUSES).join(", ")}` });
+    }
+
     const { data, error } = await update_appointment_status(appointmentId, status);
-    
+
     if (error) {
       return res.status(400).json({ error });
     }
-    
+
     res.status(200).json({ message: "Appointment updated successfully", data });
   } catch (error) {
     console.error("Update appointment error:", error);
@@ -119,7 +191,26 @@ const registerPatient = async (req, res) => {
 
 const getAllPatients = async (req, res) => {
   try {
-    const { data, error } = await get_all_patients();
+    let hospitalId = req.query?.hospitalId || req.body?.hospitalId || null;
+    const receptionistId = req.query?.receptionistId || req.body?.receptionistId || null;
+
+    if (!hospitalId && receptionistId) {
+      const { data: profile, error: profileError } = await supabase
+        .from("receptionist_profile")
+        .select("hospital_id")
+        .eq("id", receptionistId)
+        .maybeSingle();
+      if (profileError) {
+        console.error("Receptionist profile lookup failed:", profileError);
+      }
+      hospitalId = profile?.hospital_id ?? null;
+    }
+
+    if (!hospitalId) {
+      return res.status(400).json({ error: "hospitalId is required to list patients." });
+    }
+
+    const { data, error } = await get_all_patients(hospitalId);
     
     if (error) {
       return res.status(400).json({ error });
@@ -302,23 +393,146 @@ const admitPatientToBed = async (req, res) => {
 
 const fetchAllDoctors = async (req, res) => {
   try {
-    console.log("Fetching doctors from Supabase..."); 
+    const hospitalId = req.query?.hospitalId || req.body?.hospitalId || null;
 
-    const { data, error } = await supabase
+    let query = supabase
       .from("Doctor_Profile")
-      .select("id, firstName, lastName")
+      .select("id, firstName, lastName, specs, hospital_id, hospital_name")
       .order("firstName");
+
+    if (hospitalId) {
+      query = query.eq("hospital_id", hospitalId);
+    }
+
+    const { data, error } = await query;
 
     if (error) {
       console.error("Supabase error:", error);
       return res.status(400).json({ error: error.message });
     }
 
-    console.log("Doctors fetched:", data);
     res.status(200).json(data || []);
   } catch (error) {
     console.error("Fetch doctors error:", error);
     res.status(500).json({ error: "Internal Server Error" });
+  }
+};
+
+const listAppointmentRequests = async (req, res) => {
+  try {
+    const receptionistId =
+      req.query?.receptionistId || req.body?.receptionistId;
+    if (!receptionistId) {
+      return res
+        .status(400)
+        .json({ error: "receptionistId is required to fetch requests." });
+    }
+
+    const { data: profile, error: profileError } = await supabase
+      .from("receptionist_profile")
+      .select("id, hospital_id, hospital_name, firstname, lastname")
+      .eq("id", receptionistId)
+      .maybeSingle();
+
+    if (profileError || !profile) {
+      return res.status(400).json({ error: "Receptionist profile not found." });
+    }
+
+    if (!profile.hospital_id) {
+      return res
+        .status(400)
+        .json({ error: "Receptionist is not linked to a hospital." });
+    }
+
+    const { data, error } = await listAppointmentRequestsForHospital({
+      hospitalId: profile.hospital_id,
+      status: req.query?.status || "pending",
+    });
+
+    if (error) {
+      throw error;
+    }
+
+    return res.status(200).json({
+      data,
+      hospital: {
+        id: profile.hospital_id,
+        name: profile.hospital_name,
+      },
+      receptionist: {
+        id: profile.id,
+        firstName: profile.firstname ?? profile.firstName ?? null,
+        lastName: profile.lastname ?? profile.lastName ?? null,
+      },
+    });
+  } catch (error) {
+    console.error("List appointment requests error:", error);
+    return res.status(500).json({
+      error: error?.message || "Failed to load appointment requests.",
+    });
+  }
+};
+
+const respondToAppointmentRequestController = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const {
+      action,
+      receptionistId,
+      doctorId,
+      appointmentDate,
+      appointmentTime,
+      declineReason,
+      notes,
+    } = req.body ?? {};
+
+    if (!id || !action || !receptionistId) {
+      return res.status(400).json({
+        error:
+          "request id, action, and receptionistId are required to respond to a request.",
+      });
+    }
+
+    const { data: profile, error: profileError } = await supabase
+      .from("receptionist_profile")
+      .select("hospital_id")
+      .eq("id", receptionistId)
+      .maybeSingle();
+
+    if (profileError || !profile?.hospital_id) {
+      return res.status(400).json({
+        error: "Receptionist profile not found or missing hospital mapping.",
+      });
+    }
+
+    const { data, error } = await respondToAppointmentRequest({
+      requestId: id,
+      action,
+      receptionistId,
+      doctorId,
+      appointmentDate,
+      appointmentTime,
+      declineReason,
+      notes,
+      hospitalId: profile.hospital_id,
+    });
+
+    if (error) {
+      return res.status(400).json({ error: error.message || "Failed to update request." });
+    }
+
+    return res.status(200).json({
+      message:
+        action === "accept"
+          ? "Appointment request accepted and scheduled."
+          : "Appointment request declined.",
+      data,
+    });
+  } catch (error) {
+    console.error("Respond to appointment request error:", error);
+    return res.status(500).json({
+      error: error?.message || "Failed to respond to appointment request.",
+    });
   }
 };
 
@@ -339,5 +553,9 @@ export {
   updateInvoiceStatus,
   getBedStatus,
   admitPatientToBed,
-  fetchAllDoctors
+  fetchAllDoctors,
+  listAppointmentRequests,
+  respondToAppointmentRequestController,
+  getReceptionistProfile,
+  updateReceptionistProfile,
 };

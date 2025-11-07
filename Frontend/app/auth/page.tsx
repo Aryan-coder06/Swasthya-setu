@@ -14,8 +14,23 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import axios from "axios";
 import { API_BASE_URL, apiRoute } from "@/config/env";
+import { useToast } from "@/hooks/use-toast";
 
 const API_URL = API_BASE_URL;
+
+const normaliseUserProfile = (user: any, role: string | null = null) => {
+  if (!user || typeof user !== "object") return user;
+  const next = { ...user };
+  if (next.firstname && !next.firstName) next.firstName = next.firstname;
+  if (next.lastname && !next.lastName) next.lastName = next.lastname;
+  if (next.phoneNo && !next.phone_no) next.phone_no = next.phoneNo;
+  if (next.phone_no && !next.phoneNo) next.phoneNo = next.phone_no;
+  if (next.hospital_id && !next.hospitalId) next.hospitalId = next.hospital_id;
+  if (next.hospitalId && !next.hospital_id) next.hospital_id = next.hospitalId;
+  if (next.hospital_name && !next.hospitalName) next.hospitalName = next.hospital_name;
+  if (role && !next.role) next.role = role;
+  return next;
+};
 
 type HospitalOption = {
   id: string;
@@ -29,6 +44,7 @@ export default function AuthPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [selectedRole, setSelectedRole] = useState<string | null>(null);
   const [authMode, setAuthMode] = useState<"login" | "register">("login");
+  const { toast } = useToast();
   const [formData, setFormData] = useState({
     firstName: "",
     lastName: "",
@@ -144,6 +160,10 @@ export default function AuthPage() {
         email: forgotPasswordEmail,
       });
       setForgotPasswordMessage({ type: "success", text: "Password reset email sent successfully. Please check your inbox." });
+      toast({
+        title: "Password reset sent",
+        description: "Check your inbox for the reset link.",
+      });
       setTimeout(() => {
         setForgotPasswordOpen(false);
         setForgotPasswordEmail("");
@@ -151,9 +171,15 @@ export default function AuthPage() {
       }, 2000);
     } catch (error: any) {
       console.error('Forgot password error:', error);
+      const messageText = error.response?.data?.error || error.message || "Failed to send password reset email. Please try again.";
+      toast({
+        title: "Reset request failed",
+        description: messageText,
+        variant: "destructive",
+      });
       setForgotPasswordMessage({
         type: "error",
-        text: error.response?.data?.error || error.message || "Failed to send password reset email. Please try again."
+        text: messageText
       });
     } finally {
       setForgotPasswordLoading(false);
@@ -166,6 +192,11 @@ export default function AuthPage() {
     setMessage(null);
     try {
       if ((selectedRole === "doctor" || selectedRole === "receptionist") && !formData.hospitalId) {
+        toast({
+          title: "Hospital required",
+          description: "Select the hospital you are associated with.",
+          variant: "destructive",
+        });
         setMessage({ type: "error", text: "Select the hospital you are associated with." });
         setIsLoading(false);
         return;
@@ -194,6 +225,11 @@ export default function AuthPage() {
 
       const errorMsg = response.data.error || response.data.reason;
       if (errorMsg && errorMsg !== "None" && errorMsg !== null) {
+        toast({
+          title: "Registration failed",
+          description: errorMsg,
+          variant: "destructive",
+        });
         setMessage({
           type: "error",
           text: errorMsg || "Registration failed. Please try again.",
@@ -202,18 +238,36 @@ export default function AuthPage() {
       }
 
       if (response.data.user && response.data.session) {
+        toast({
+          title: "Registration successful",
+          description: `Welcome to SwasthyaSetu, ${formData.firstName || "there"}!`,
+        });
         setMessage({ type: "success", text: response.data.message || "Registration successful!" });
-        localStorage.setItem("user", JSON.stringify(response.data.user));
+        const normalisedUser = normaliseUserProfile(response.data.user, selectedRole);
+        localStorage.setItem("user", JSON.stringify(normalisedUser));
         localStorage.setItem("session", JSON.stringify(response.data.session));
         setTimeout(() => {
           router.push(roles.find((r) => r.id === selectedRole)!.route);
         }, 2000);
       } else {
+        toast({
+          title: "Registration failed",
+          description: "Invalid response from server.",
+          variant: "destructive",
+        });
         setMessage({ type: "error", text: "Registration failed. Invalid response from server." });
       }
     } catch (error: any) {
       console.error("Registration error:", error);
       const errorText = error.response?.data?.reason || error.response?.data?.error || error.message;
+      toast({
+        title: "Registration failed",
+        description:
+          error.response?.status === 404
+            ? "Backend server not found. Ensure the server is running on the configured API URL."
+            : (errorText && errorText !== "None" ? errorText : "Please try again."),
+        variant: "destructive",
+      });
       setMessage({
         type: "error",
         text:
@@ -234,6 +288,11 @@ export default function AuthPage() {
     }
 
     if (!selectedRole) {
+      toast({
+        title: "Role required",
+        description: "Please select a role before continuing.",
+        variant: "destructive",
+      });
       setMessage({ type: "error", text: "Please select a role." });
       return;
     }
@@ -242,6 +301,11 @@ export default function AuthPage() {
     setMessage(null);
     try {
       if ((selectedRole === "doctor" || selectedRole === "receptionist") && !formData.hospitalId) {
+        toast({
+          title: "Hospital required",
+          description: "Select your hospital before signing in.",
+          variant: "destructive",
+        });
         setMessage({ type: "error", text: "Select your hospital before signing in." });
         setIsLoading(false);
         return;
@@ -260,19 +324,34 @@ export default function AuthPage() {
         timeout: 30000,
       });
       setMessage({ type: "success", text: response.data.message });
-      localStorage.setItem("user", JSON.stringify(response.data.user));
-      localStorage.setItem("session", JSON.stringify(response.data.session));
+      toast({
+        title: "Welcome back",
+        description: response.data.message || "You are signed in.",
+      });
+      const normalisedUser = normaliseUserProfile(response.data.user, selectedRole);
+      localStorage.setItem("user", JSON.stringify(normalisedUser));
+      if (response.data.session) {
+        localStorage.setItem("session", JSON.stringify(response.data.session));
+      } else {
+        localStorage.removeItem("session");
+      }
       setTimeout(() => {
         router.push(roles.find((r) => r.id === selectedRole)!.route);
       }, 2000);
     } catch (error: any) {
       console.error("Signin error:", error);
+      const messageText =
+        error.response?.status === 404
+          ? "Backend server not found. Ensure the server is running on the configured API URL."
+          : error.response?.data?.error || error.message || "Sign-in failed. Please check your credentials.";
+      toast({
+        title: "Sign-in failed",
+        description: messageText,
+        variant: "destructive",
+      });
       setMessage({
         type: "error",
-        text:
-          error.response?.status === 404
-            ? "Backend server not found. Ensure the server is running on the configured API URL."
-            : error.response?.data?.error || error.message || "Sign-in failed. Please check your credentials.",
+        text: messageText,
       });
     } finally {
       setIsLoading(false);

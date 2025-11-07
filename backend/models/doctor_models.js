@@ -6,8 +6,6 @@ import {
   windowsOverlap,
 } from "../utils/appointmentTime.js";
 
-const STORAGE_BUCKET = "User_Docs";
-
 const generateMeetingLink = (appointmentId) => {
   const roomName = `SwasthyaSetu-Consultation-${appointmentId}-${Date.now()}`;
   return `https://meet.jit.si/${roomName}`;
@@ -336,53 +334,49 @@ const buildPatientList = async (doctorId) => {
 
 const getDoctorPatients = (doctorId) => buildPatientList(doctorId);
 
+const formatPatientName = (patientLike = {}) => {
+  const patient = patientLike && typeof patientLike === "object" ? patientLike : {};
+  const first = patient.firstName?.trim?.() ?? "";
+  const last = patient.lastName?.trim?.() ?? "";
+  const full = `${first} ${last}`.trim();
+  return full || "Patient";
+};
+
 const getDoctorRecords = async (doctorId) => {
-  const patientResult = await buildPatientList(doctorId);
-  if (patientResult.error) {
-    return { data: null, error: patientResult.error };
-  }
-
-  const patients = patientResult.data || [];
-  const ids = patients.map((p) => p.id).filter(Boolean);
-  if (!ids.length) {
-    return { data: [], error: null };
-  }
-
   const { data, error } = await supabase
-    .from("Patient_Profile")
-    .select("id, firstName, lastName, docs")
-    .in("id", ids);
+    .from("prescriptions")
+    .select(
+      `
+        id,
+        doctor_id,
+        patient_id,
+        medications,
+        notes,
+        ai_analysis,
+        created_at,
+        patient:patient_id (
+          id,
+          firstName,
+          lastName
+        )
+      `
+    )
+    .eq("doctor_id", doctorId)
+    .order("created_at", { ascending: false });
 
   if (error) {
     return { data: null, error };
   }
 
-  const records = [];
-  for (const row of data || []) {
-    const documents = Array.isArray(row.docs) ? row.docs : [];
-    const entry = {
-      patientId: row.id,
-      patientName: `${row.firstName || ""} ${row.lastName || ""}`.trim(),
-      documents: [],
-    };
-
-    for (const doc of documents) {
-      if (!doc?.path) continue;
-      const { data: signed, error: signedError } = await supabase.storage
-        .from(STORAGE_BUCKET)
-        .createSignedUrl(doc.path, 60 * 60);
-
-      if (!signedError && signed?.signedUrl) {
-        entry.documents.push({
-          type: doc.type || "document",
-          path: doc.path,
-          url: signed.signedUrl,
-        });
-      }
-    }
-
-    records.push(entry);
-  }
+  const records = (data || []).map((row) => ({
+    id: row.id,
+    patientId: row.patient_id,
+    patientName: formatPatientName(row.patient),
+    medications: Array.isArray(row.medications) ? row.medications : [],
+    notes: row.notes || "",
+    aiAnalysis: row.ai_analysis || null,
+    createdAt: row.created_at,
+  }));
 
   return { data: records, error: null };
 };

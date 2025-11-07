@@ -3,6 +3,7 @@ import cors from "cors";
 import { createClient } from '@supabase/supabase-js';
 import dotenv from 'dotenv';
 import patientRoutes from "./routes/patientRoutes.js";
+import notificationRoutes from "./routes/notificationRoutes.js";
 
 dotenv.config();
 
@@ -24,6 +25,7 @@ app.use("/auth", auth);
 app.use("/receptionist", receptionistRoutes);
 app.use("/api/doctor", doctorRoutes);
 app.use("/patient", patientRoutes);
+app.use("/notifications", notificationRoutes);
 
 app.get("/", (req, res) => {
   res.send("Hello");

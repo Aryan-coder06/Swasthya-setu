@@ -32,8 +32,20 @@ import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
+import { toast as notify } from "react-toastify";
 import { API_BASE_URL } from "@/config/env";
+import { requestAppointment, fetchDoctorsForHospitalApi } from "@/lib/api";
+import type { DoctorSummary } from "@/lib/types";
 
 const API_BASE = API_BASE_URL;
 
@@ -145,7 +157,7 @@ const normalizeUrl = (value?: string | null): string | undefined => {
 };
 
 export default function HospitalsPage() {
-  const { toast } = useToast();
+  const { toast: pushToast } = useToast();
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedSpecialty, setSelectedSpecialty] = useState("all");
   const [maxDistance, setMaxDistance] = useState<number[]>([10]);
@@ -164,6 +176,17 @@ export default function HospitalsPage() {
   const [activeCity, setActiveCity] = useState<string | null>(null);
   const [selectedCityFilter, setSelectedCityFilter] = useState<string>("all");
   const [activeCityQueries, setActiveCityQueries] = useState<string[]>([]);
+  const [patientId, setPatientId] = useState<string | null>(null);
+  const [appointmentDialogOpen, setAppointmentDialogOpen] = useState(false);
+  const [appointmentHospital, setAppointmentHospital] = useState<Hospital | null>(null);
+  const [appointmentDoctors, setAppointmentDoctors] = useState<DoctorSummary[]>([]);
+  const [appointmentDoctorId, setAppointmentDoctorId] = useState<string>("");
+  const [appointmentPreferredSpecialty, setAppointmentPreferredSpecialty] = useState<string>("");
+  const [appointmentPreferredDate, setAppointmentPreferredDate] = useState<string>("");
+  const [appointmentPreferredTime, setAppointmentPreferredTime] = useState<string>("");
+  const [appointmentNotes, setAppointmentNotes] = useState<string>("");
+  const [appointmentDoctorsLoading, setAppointmentDoctorsLoading] = useState(false);
+  const [requestingAppointment, setRequestingAppointment] = useState(false);
 
   const debouncedFilters = useDebounce({
     maxDistanceKm: maxDistance[0],
@@ -174,7 +197,7 @@ export default function HospitalsPage() {
 
   const requestLocation = useCallback(() => {
     if (!("geolocation" in navigator)) {
-      toast({
+      pushToast({
         title: "Location access unavailable",
         description: "Geolocation is not supported in this browser. Please search manually.",
         variant: "destructive",
@@ -196,17 +219,17 @@ export default function HospitalsPage() {
         setActiveCity(null);
         setActiveCityQueries([]);
         setIsLocating(false);
-        toast({ title: "Location detected", description: "Fetching hospitals near you." });
+        pushToast({ title: "Location detected", description: "Fetching hospitals near you." });
       },
       (geoError) => {
         console.error("Geolocation error", geoError);
         setIsLocating(false);
-        setError("We couldn't access your location. Showing hospitals around New Delhi as a fallback.");
+        setError("We couldn&apos;t access your location. Showing hospitals around New Delhi as a fallback.");
         setLocation({ lat: 28.6139, lng: 77.2090 });
         setSelectedPreset("delhi");
         setActiveCity("New Delhi");
         setActiveCityQueries(["New Delhi", "Delhi"]);
-        toast({
+        pushToast({
           title: "Location request denied",
           description: "Enable location access in your browser settings to see hospitals closest to you.",
           variant: "destructive",
@@ -214,7 +237,20 @@ export default function HospitalsPage() {
       },
       { enableHighAccuracy: true, timeout: 8000 }
     );
-  }, [toast]);
+  }, [pushToast]);
+
+  useEffect(() => {
+    const storedUser = typeof window !== "undefined" ? localStorage.getItem("user") : null;
+    if (!storedUser) return;
+    try {
+      const parsed = JSON.parse(storedUser);
+      if (parsed?.id) {
+        setPatientId(parsed.id);
+      }
+    } catch (error) {
+      console.error("Failed to parse stored patient", error);
+    }
+  }, []);
 
   const handlePresetChange = useCallback(
     (value: string) => {
@@ -368,7 +404,7 @@ export default function HospitalsPage() {
         if (fetchError.name === "AbortError") return;
         console.error("Hospital fetch error", fetchError);
         setError(fetchError.message || "Unable to fetch hospitals right now.");
-        toast({
+        pushToast({
           title: "Could not load hospitals",
           description: fetchError.message || "Please try again in a moment.",
           variant: "destructive",
@@ -377,7 +413,7 @@ export default function HospitalsPage() {
         setIsLoading(false);
       }
     },
-    [location, debouncedFilters, toast, activeCity, selectedCityFilter, activeCityQueries]
+    [location, debouncedFilters, pushToast, selectedCityFilter, activeCityQueries]
   );
 
   useEffect(() => {
@@ -470,6 +506,92 @@ export default function HospitalsPage() {
     if (!targetLat || !targetLng) return;
     const url = `https://www.google.com/maps/dir/?api=1&destination=${targetLat},${targetLng}`;
     window.open(url, "_blank");
+  };
+
+  const appointmentSpecialties = useMemo(() => {
+    if (!appointmentHospital) return [];
+    return parseList(appointmentHospital.specialties).filter(
+      (entry) => entry && entry.toLowerCase() !== "all"
+    );
+  }, [appointmentHospital]);
+
+  useEffect(() => {
+    if (appointmentSpecialties.length && !appointmentPreferredSpecialty) {
+      setAppointmentPreferredSpecialty(appointmentSpecialties[0]);
+    }
+  }, [appointmentSpecialties, appointmentPreferredSpecialty]);
+
+  const resetAppointmentForm = () => {
+    setAppointmentDoctorId("");
+    setAppointmentPreferredSpecialty("");
+    setAppointmentPreferredDate("");
+    setAppointmentPreferredTime("");
+    setAppointmentNotes("");
+  };
+
+  const handleOpenAppointmentDialog = async (hospital: Hospital) => {
+    setSelectedHospitalId(hospital.id);
+    setAppointmentHospital(hospital);
+    setAppointmentDialogOpen(true);
+    setAppointmentDoctors([]);
+    resetAppointmentForm();
+    const specialties = parseList(hospital.specialties).filter(
+      (entry) => entry && entry.toLowerCase() !== "all"
+    );
+    if (specialties.length) {
+      setAppointmentPreferredSpecialty(specialties[0]);
+    }
+    if (!hospital.id) {
+      return;
+    }
+    setAppointmentDoctorsLoading(true);
+    try {
+      const doctorsList = await fetchDoctorsForHospitalApi(hospital.id);
+      setAppointmentDoctors(doctorsList);
+      if (doctorsList.length) {
+        setAppointmentDoctorId(doctorsList[0].id);
+      }
+    } catch (error: any) {
+      console.error("Doctor lookup failed", error);
+      pushToast({
+        title: "Doctor directory unavailable",
+        description: "We couldn&apos;t load doctors for this hospital. You can still submit a request for any available doctor.",
+        variant: "destructive",
+      });
+    } finally {
+      setAppointmentDoctorsLoading(false);
+    }
+  };
+
+  const handleSubmitAppointmentRequest = async () => {
+    if (!patientId) {
+      notify.error("Please sign in again before requesting an appointment.");
+      return;
+    }
+    if (!appointmentHospital) {
+      notify.error("Choose a hospital before submitting your request.");
+      return;
+    }
+    try {
+      setRequestingAppointment(true);
+      await requestAppointment({
+        patientId,
+        hospitalId: appointmentHospital.id,
+        doctorId: appointmentDoctorId || undefined,
+        preferredSpecialty: appointmentPreferredSpecialty || undefined,
+        preferredDate: appointmentPreferredDate || undefined,
+        preferredTime: appointmentPreferredTime || undefined,
+        notes: appointmentNotes || undefined,
+      });
+      notify.success("Appointment request submitted. Reception will confirm shortly.");
+      setAppointmentDialogOpen(false);
+      resetAppointmentForm();
+    } catch (error: any) {
+      console.error("Appointment request error:", error);
+      notify.error(error?.message || "Unable to submit appointment request.");
+    } finally {
+      setRequestingAppointment(false);
+    }
   };
 
   const getFacilityIcon = (facility: string) => {
@@ -713,6 +835,10 @@ export default function HospitalsPage() {
                         ? `₹${hospital.consultation_fee_min}${hospital.consultation_fee_max ? ` - ₹${hospital.consultation_fee_max}` : ""}`
                         : "Fee info unavailable";
 
+                      function ensureHttps(website: string): string | undefined {
+                        throw new Error("Function not implemented.");
+                      }
+
                       return (
                         <motion.div key={hospital.id} variants={itemVariants}>
                           <Card
@@ -817,19 +943,32 @@ export default function HospitalsPage() {
                                   View image
                                 </a>
                               )}
-                              {hospital.website && (
-                                <a
-                                  href={hospital.website}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="text-xs text-primary hover:underline"
-                                >
-                                  Visit website
-                                </a>
-                              )}
                               {hospital.source && (
                                 <p className="text-xs text-muted-foreground">Source: {hospital.source}</p>
                               )}
+                              <div className="flex flex-wrap gap-2 pt-2">
+                                <Button
+                                  size="sm"
+                                  onClick={(event) => {
+                                    event.stopPropagation();
+                                    handleOpenAppointmentDialog(hospital);
+                                  }}
+                                >
+                                  Request appointment
+                                </Button>
+                                {hospital.website && (
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    asChild
+                                    onClick={(event) => event.stopPropagation()}
+                                  >
+                                    <a href={ensureHttps(hospital.website)} target="_blank" rel="noopener noreferrer">
+                                      Visit website
+                                    </a>
+                                  </Button>
+                                )}
+                              </div>
                             </CardContent>
                           </Card>
                         </motion.div>
@@ -899,6 +1038,119 @@ export default function HospitalsPage() {
           </motion.div>
         </div>
       </div>
+
+      <Dialog
+        open={appointmentDialogOpen}
+        onOpenChange={(open) => {
+          setAppointmentDialogOpen(open);
+          if (!open) {
+            setAppointmentHospital(null);
+            setAppointmentDoctors([]);
+            resetAppointmentForm();
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Request an appointment</DialogTitle>
+            <DialogDescription>
+              {appointmentHospital
+                ? `Share your preferences and the reception at ${appointmentHospital.name} will confirm the slot.`
+                : "Select a hospital to request an appointment."}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-2">
+              <Label>Preferred doctor</Label>
+              {appointmentDoctorsLoading ? (
+                <Skeleton className="h-10 w-full" />
+              ) : (
+                <Select
+                  value={appointmentDoctorId}
+                  onValueChange={setAppointmentDoctorId}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Any available doctor" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="">Any available doctor</SelectItem>
+                    {appointmentDoctors.map((doctor) => (
+                      <SelectItem key={doctor.id} value={doctor.id}>
+                        {`Dr. ${doctor.firstName ?? ""} ${doctor.lastName ?? ""}`.trim()}
+                        {doctor.specs ? ` • ${doctor.specs}` : ""}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
+              <p className="text-xs text-muted-foreground">
+                Leave this as “Any” and the receptionist will match you with the best available doctor.
+              </p>
+            </div>
+            <div className="space-y-2">
+              <Label>Specialty preference</Label>
+              <Select
+                value={appointmentPreferredSpecialty}
+                onValueChange={setAppointmentPreferredSpecialty}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Any specialty" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="">Any specialty</SelectItem>
+                  {appointmentSpecialties.map((specialty) => (
+                    <SelectItem key={specialty} value={specialty}>
+                      {specialty}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-2">
+                <Label htmlFor="appointment-preferred-date">Preferred date</Label>
+                <Input
+                  id="appointment-preferred-date"
+                  type="date"
+                  value={appointmentPreferredDate}
+                  onChange={(event) => setAppointmentPreferredDate(event.target.value)}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="appointment-preferred-time">Preferred time</Label>
+                <Input
+                  id="appointment-preferred-time"
+                  type="time"
+                  value={appointmentPreferredTime}
+                  onChange={(event) => setAppointmentPreferredTime(event.target.value)}
+                />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="appointment-notes">Additional notes</Label>
+              <Textarea
+                id="appointment-notes"
+                value={appointmentNotes}
+                onChange={(event) => setAppointmentNotes(event.target.value)}
+                placeholder="Share symptoms, previous reports, or scheduling constraints."
+                rows={3}
+              />
+            </div>
+          </div>
+          <DialogFooter className="gap-2">
+            <Button
+              variant="outline"
+              onClick={() => setAppointmentDialogOpen(false)}
+              disabled={requestingAppointment}
+            >
+              Cancel
+            </Button>
+            <Button onClick={handleSubmitAppointmentRequest} disabled={requestingAppointment}>
+              {requestingAppointment ? "Submitting..." : "Submit request"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

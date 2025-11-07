@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { motion } from "framer-motion";
 import {
   Calendar,
@@ -11,9 +11,10 @@ import {
   ChevronRight,
   RefreshCw,
   Loader2,
+  Clock,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Input } from "@/components/ui/input";
@@ -32,6 +33,9 @@ import { useToast } from "@/hooks/use-toast";
 import axios from "axios";
 import { useProfile } from "@/app/context/ProfileContext";
 import { API_BASE_URL } from "@/config/env";
+import { getPatientAppointmentRequests, requestAppointment } from "@/lib/api";
+import type { AppointmentRequest } from "@/lib/types";
+import { toast as notify } from "react-toastify";
 
 const API_URL = API_BASE_URL;
 const SLOT_DURATION_MINUTES = 15;
@@ -57,6 +61,7 @@ interface DoctorOption {
   id: string;
   name: string;
   specialty?: string | null;
+  hospitalId?: string | null;
   hospitalName?: string | null;
 }
 
@@ -106,7 +111,7 @@ const formatTimeFromIso = (iso?: string | null) => {
 const ALL_SLOTS = generateDailySlots();
 
 export default function AppointmentsPage() {
-  const { toast } = useToast();
+  const { toast: pushToast } = useToast();
   const { profileData } = useProfile();
 
   const patientId = profileData.id;
@@ -115,6 +120,8 @@ export default function AppointmentsPage() {
   const [showBookingModal, setShowBookingModal] = useState(false);
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [appointmentsLoading, setAppointmentsLoading] = useState(false);
+  const [appointmentRequests, setAppointmentRequests] = useState<AppointmentRequest[]>([]);
+  const [requestsLoading, setRequestsLoading] = useState(false);
   const [doctorOptions, setDoctorOptions] = useState<DoctorOption[]>([]);
   const [doctorLoading, setDoctorLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
@@ -130,15 +137,19 @@ export default function AppointmentsPage() {
 
   const todayKey = useMemo(() => getDateKey(new Date()), []);
   const activeStatusSet = useMemo(() => new Set(ACTIVE_APPOINTMENT_STATUSES), []);
+  const requestStatusRef = useRef<Map<string, string>>(new Map());
 
   const getStatusColor = useCallback((status: string) => {
     switch (status) {
       case "confirmed":
+      case "accepted":
         return "bg-green-100 text-green-800";
       case "pending":
+      case "in-progress":
         return "bg-yellow-100 text-yellow-800";
       case "completed":
         return "bg-blue-100 text-blue-800";
+      case "declined":
       case "cancelled":
         return "bg-red-100 text-red-800";
       default:
@@ -177,7 +188,7 @@ export default function AppointmentsPage() {
       setAppointments(mapped);
     } catch (error) {
       console.error("Failed to load appointments:", error);
-      toast({
+      pushToast({
         title: "Unable to load appointments",
         description: "Please try again after a moment.",
         variant: "destructive",
@@ -185,7 +196,7 @@ export default function AppointmentsPage() {
     } finally {
       setAppointmentsLoading(false);
     }
-  }, [patientId, toast]);
+  }, [patientId, pushToast]);
 
   const fetchDoctorDirectory = useCallback(async () => {
     setDoctorLoading(true);
@@ -199,13 +210,14 @@ export default function AppointmentsPage() {
               `${doctor.firstName ?? ""} ${doctor.lastName ?? ""}`.trim() ||
               "Doctor",
             specialty: doctor.specialty ?? null,
+            hospitalId: doctor.hospitalId ?? doctor.hospital_id ?? null,
             hospitalName: doctor.hospitalName ?? null,
           }))
         : [];
       setDoctorOptions(data);
     } catch (error) {
       console.error("Failed to load doctors:", error);
-      toast({
+      pushToast({
         title: "Unable to load doctors",
         description: "Doctor list could not be refreshed.",
         variant: "destructive",
@@ -213,7 +225,25 @@ export default function AppointmentsPage() {
     } finally {
       setDoctorLoading(false);
     }
-  }, [toast]);
+  }, [pushToast]);
+
+  const fetchAppointmentRequests = useCallback(async () => {
+    if (!patientId) return;
+    setRequestsLoading(true);
+    try {
+      const data = await getPatientAppointmentRequests(patientId);
+      setAppointmentRequests(data);
+    } catch (error) {
+      console.error("Failed to load appointment requests:", error);
+      pushToast({
+        title: "Unable to load requests",
+        description: "Please refresh after a moment.",
+        variant: "destructive",
+      });
+    } finally {
+      setRequestsLoading(false);
+    }
+  }, [patientId, pushToast]);
 
   useEffect(() => {
     if (patientId) {
@@ -222,8 +252,45 @@ export default function AppointmentsPage() {
   }, [patientId, fetchAppointments]);
 
   useEffect(() => {
+    if (!patientId) return;
+    fetchAppointmentRequests();
+  }, [patientId, fetchAppointmentRequests]);
+
+  useEffect(() => {
+    if (!patientId) return;
+    const interval = window.setInterval(fetchAppointmentRequests, 45000);
+    return () => window.clearInterval(interval);
+  }, [patientId, fetchAppointmentRequests]);
+
+  useEffect(() => {
     fetchDoctorDirectory();
   }, [fetchDoctorDirectory]);
+
+  useEffect(() => {
+    const previous = requestStatusRef.current;
+    const next = new Map<string, string>();
+    appointmentRequests.forEach((request) => {
+      next.set(request.id, request.status);
+      const prevStatus = previous.get(request.id);
+      if (prevStatus && prevStatus !== request.status) {
+        if (request.status === "accepted") {
+          notify.success(
+            `Appointment confirmed for ${request.appointment_date ? formatDateReadable(request.appointment_date) : "the scheduled day"}.`
+          );
+          fetchAppointments();
+        } else if (request.status === "declined") {
+          notify.error(
+            request.decline_reason
+              ? `Appointment request declined: ${request.decline_reason}`
+              : "Appointment request declined."
+          );
+        } else if (request.status === "cancelled") {
+          notify.info("Appointment request was cancelled.");
+        }
+      }
+    });
+    requestStatusRef.current = next;
+  }, [appointmentRequests, fetchAppointments]);
 
   useEffect(() => {
     if (!selectedDoctorId || !selectedDate) {
@@ -279,7 +346,7 @@ export default function AppointmentsPage() {
         setSelectedSlot((prev) => (slots.includes(prev) ? prev : slots[0] ?? ""));
       } catch (error) {
         console.error("Failed to load slots:", error);
-        toast({
+        pushToast({
           title: "Unable to load slots",
           description: "Please try a different doctor or date.",
           variant: "destructive",
@@ -292,7 +359,7 @@ export default function AppointmentsPage() {
     };
 
     loadSlots();
-  }, [selectedDoctorId, selectedDate, todayKey, activeStatusSet, toast]);
+  }, [selectedDoctorId, selectedDate, todayKey, activeStatusSet, pushToast]);
 
   useEffect(() => {
     if (showBookingModal) {
@@ -383,7 +450,7 @@ export default function AppointmentsPage() {
   const handleBookAppointment = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!patientId) {
-      toast({
+      pushToast({
         title: "Profile incomplete",
         description: "Sign in again to refresh your profile before booking.",
         variant: "destructive",
@@ -391,7 +458,7 @@ export default function AppointmentsPage() {
       return;
     }
     if (!selectedDoctorId || !selectedDate || !selectedSlot) {
-      toast({
+      pushToast({
         title: "Missing details",
         description: "Select doctor, date, and time to continue.",
         variant: "destructive",
@@ -399,29 +466,39 @@ export default function AppointmentsPage() {
       return;
     }
 
-    try {
-      await axios.post(`${API_URL}/patient/appointments/book`, {
-        patientId,
-        doctorId: selectedDoctorId,
-        appointmentDate: selectedDate,
-        appointmentTime: selectedSlot,
-      });
-      toast({
-        title: "Appointment booked",
-        description: "Your appointment has been scheduled.",
-      });
-      setShowBookingModal(false);
-      fetchAppointments();
-    } catch (error: any) {
-      console.error("Failed to book appointment:", error);
-      toast({
-        title: "Booking failed",
-        description:
-          error.response?.data?.error ||
-          error.message ||
-          "We could not confirm this slot. Please try another time.",
+    const doctor = doctorOptions.find((doc) => doc.id === selectedDoctorId);
+    const hospitalId = doctor?.hospitalId;
+    if (!hospitalId) {
+      pushToast({
+        title: "Hospital unavailable",
+        description: "This doctor is not linked to a hospital. Please pick another doctor.",
         variant: "destructive",
       });
+      return;
+    }
+
+    try {
+      await requestAppointment({
+        patientId,
+        doctorId: selectedDoctorId,
+        hospitalId,
+        preferredDate: selectedDate,
+        preferredTime: selectedSlot,
+      });
+      notify.info("Appointment request submitted. Reception will confirm the slot.");
+      setShowBookingModal(false);
+      setSelectedDate("");
+      setSelectedDoctorId("");
+      setSelectedSlot("");
+      setAvailableSlots([]);
+      fetchAppointmentRequests();
+    } catch (error: any) {
+      console.error("Failed to book appointment:", error);
+      notify.error(
+        error?.response?.data?.error ||
+          error?.message ||
+          "Unable to submit appointment request. Please try another time."
+      );
     }
   };
 
@@ -547,6 +624,79 @@ export default function AppointmentsPage() {
             </form>
           </DialogContent>
         </Dialog>
+      </motion.div>
+
+      <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <CardTitle className="flex items-center gap-2">
+                <Clock className="w-5 h-5 text-purple-500" /> Appointment Requests
+              </CardTitle>
+              <Badge variant="outline">
+                {appointmentRequests.filter((request) => request.status === "pending").length} pending
+              </Badge>
+            </div>
+            <CardDescription>
+              Track pending approvals, confirmations, and any requests declined by the hospital.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {requestsLoading ? (
+              <div className="space-y-3">
+                {[...Array(3)].map((_, idx) => (
+                  <div key={idx} className="animate-pulse rounded-lg border p-4">
+                    <div className="h-4 w-32 bg-slate-200 rounded mb-2" />
+                    <div className="h-3 w-48 bg-slate-100 rounded" />
+                  </div>
+                ))}
+              </div>
+            ) : appointmentRequests.length === 0 ? (
+              <p className="text-sm text-muted-foreground">
+                You don&apos;t have any appointment requests yet. Submit a request from the hospital explorer.
+              </p>
+            ) : (
+              <div className="space-y-3">
+                {appointmentRequests.map((request) => (
+                  <div
+                    key={request.id}
+                    className="flex flex-col gap-2 rounded-xl border bg-white p-4 transition hover:shadow-sm md:flex-row md:items-center md:justify-between"
+                  >
+                    <div>
+                      <p className="text-sm font-semibold text-slate-900">
+                        {request.hospital_name || "Requested hospital"}
+                      </p>
+                      <p className="text-xs text-slate-500">
+                        Preferred: {request.preferred_date ?? "Any day"} · {request.preferred_time ?? "Any time"}
+                      </p>
+                      {request.notes && (
+                        <p className="text-xs text-slate-500 mt-1">
+                          Notes: {request.notes}
+                        </p>
+                      )}
+                    </div>
+                    <div className="text-right space-y-1">
+                      <Badge className={getStatusColor(request.status)}>
+                        {request.status}
+                      </Badge>
+                      {request.status === "accepted" && (
+                        <p className="text-xs text-emerald-600">
+                          Scheduled {request.appointment_date ? formatDateReadable(request.appointment_date) : "soon"}
+                          {request.appointment_time ? ` · ${toDisplayTime(request.appointment_time)}` : ""}
+                        </p>
+                      )}
+                      {request.status === "declined" && request.decline_reason && (
+                        <p className="text-xs text-rose-500">
+                          {request.decline_reason}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
       </motion.div>
 
       <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex items-center justify-between gap-4 flex-wrap">

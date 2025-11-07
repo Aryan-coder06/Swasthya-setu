@@ -13,19 +13,28 @@ import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Toaster } from "@/components/ui/toaster";
 import { ProfileProvider, useProfile } from "../context/ProfileContext";
+import { useToast } from "@/hooks/use-toast";
+import { fetchNotifications, markAllNotificationsReadApi } from "@/lib/api";
+import type { NotificationRecord } from "@/lib/types";
 
 function PatientLayoutUI({ children }: { children: ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
   const { profileData, isDirty, saveProfile } = useProfile();
+  const { toast } = useToast();
 
   const [selectedMenu, setSelectedMenu] = useState("dashboard");
-  const [showNotifications, setShowNotifications] = useState(false);
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [isCollapsed, setIsCollapsed] = useState(true);
+  const [patientId, setPatientId] = useState<string | null>(null);
+  const [notifications, setNotifications] = useState<NotificationRecord[]>([]);
+  const [unreadCount, setUnreadCount] = useState(0);
   
   // Refs for the notification dropdown and bell icon
   const notificationRef = useRef<HTMLDivElement>(null);
   const bellRef = useRef<HTMLButtonElement>(null);
+  const knownNotificationIds = useRef<Set<string>>(new Set());
+  const notificationsLoaded = useRef(false);
 
   const menuItems = useMemo(
     () => [
@@ -48,6 +57,19 @@ function PatientLayoutUI({ children }: { children: ReactNode }) {
   );
 
   useEffect(() => {
+    const storedUser = typeof window !== "undefined" ? localStorage.getItem("user") : null;
+    if (!storedUser) return;
+    try {
+      const parsed = JSON.parse(storedUser);
+      if (parsed?.id) {
+        setPatientId(parsed.id);
+      }
+    } catch (error) {
+      console.error("Failed to parse stored patient user", error);
+    }
+  }, []);
+
+  useEffect(() => {
     const allItems = [...menuItems, ...bottomMenuItems];
     if (pathname === '/patient') {
       setSelectedMenu('dashboard');
@@ -59,6 +81,49 @@ function PatientLayoutUI({ children }: { children: ReactNode }) {
     }
   }, [pathname, menuItems, bottomMenuItems]);
 
+  useEffect(() => {
+    if (!patientId) return;
+    let cancelled = false;
+
+    const loadNotifications = async () => {
+      try {
+        const data = await fetchNotifications({
+          recipientId: patientId,
+          recipientRole: "patient",
+          limit: 25,
+        });
+        if (cancelled) return;
+        setNotifications(data);
+        setUnreadCount(data.filter((item) => item.status === "unread").length);
+        const nextIds = new Set<string>();
+        data.forEach((item) => nextIds.add(item.id));
+        if (notificationsLoaded.current) {
+          const newNotifications = data.filter((item) => !knownNotificationIds.current.has(item.id));
+          newNotifications
+            .filter((item) => item.status === "unread")
+            .forEach((item) =>
+              toast({
+                title: item.title,
+                description: item.message,
+              })
+            );
+        } else {
+          notificationsLoaded.current = true;
+        }
+        knownNotificationIds.current = nextIds;
+      } catch (error) {
+        console.error("Failed to load patient notifications", error);
+      }
+    };
+
+    loadNotifications();
+    const interval = window.setInterval(loadNotifications, 60_000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+    };
+  }, [patientId, toast]);
+
   // Effect to handle clicks outside the notification box
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -68,7 +133,7 @@ function PatientLayoutUI({ children }: { children: ReactNode }) {
         bellRef.current &&
         !bellRef.current.contains(event.target as Node)
       ) {
-        setShowNotifications(false);
+        setNotificationsOpen(false);
       }
     }
     // Bind the event listener
@@ -84,6 +149,29 @@ function PatientLayoutUI({ children }: { children: ReactNode }) {
     router.push(route);
   };
 
+  const handleToggleNotifications = async () => {
+    const nextState = !notificationsOpen;
+    setNotificationsOpen(nextState);
+    if (nextState && unreadCount > 0 && patientId) {
+      try {
+        await markAllNotificationsReadApi({
+          recipientId: patientId,
+          recipientRole: "patient",
+        });
+        setUnreadCount(0);
+        setNotifications((prev) =>
+          prev.map((notification) => ({
+            ...notification,
+            status: "read",
+            read_at: notification.read_at ?? new Date().toISOString(),
+          }))
+        );
+      } catch (error) {
+        console.error("Failed to mark notifications read", error);
+      }
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gray-50">
       <header className="bg-white border-b border-gray-200 px-6 py-4 sticky top-0 z-30">
@@ -96,25 +184,47 @@ function PatientLayoutUI({ children }: { children: ReactNode }) {
             <Badge variant="outline">Patient Portal</Badge>
           </div>
           <div className="flex items-center space-x-4">
-            <Button ref={bellRef} size="icon" variant="outline" className="relative" onClick={() => setShowNotifications(!showNotifications)}>
-              <Bell className="w-4 h-4" />
-              <span className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full"></span>
-            </Button>
-            {showNotifications && (
-              <div ref={notificationRef} className="absolute top-16 right-6 w-80 bg-white border rounded-lg shadow-lg z-50">
-                <div className="p-4 border-b"><h3 className="font-semibold">Notifications</h3></div>
-                <div className="max-h-64 overflow-y-auto">
-                  <div className="p-3 border-b hover:bg-gray-50">
-                    <p className="text-sm">Appointment confirmed with Dr. Sarah Wilson</p>
-                    <p className="text-xs text-gray-500 mt-1">2 hours ago</p>
+            <div className="relative" ref={notificationRef}>
+              <Button
+                ref={bellRef}
+                size="icon"
+                variant="outline"
+                className="relative"
+                onClick={handleToggleNotifications}
+              >
+                <Bell className="w-4 h-4" />
+                {unreadCount > 0 && (
+                  <span className="absolute -top-1 -right-1 min-w-[1.2rem] h-5 px-1 bg-red-500 text-white text-xs font-semibold rounded-full flex items-center justify-center">
+                    {unreadCount}
+                  </span>
+                )}
+              </Button>
+              {notificationsOpen && (
+                <div className="absolute right-0 mt-3 w-80 rounded-xl border border-slate-200 bg-white shadow-xl z-50">
+                  <div className="px-4 py-3 border-b">
+                    <h3 className="text-sm font-semibold text-slate-800">Notifications</h3>
+                    <p className="text-xs text-slate-500">Updates about your appointments and records.</p>
                   </div>
-                   <div className="p-3 border-b hover:bg-gray-50">
-                    <p className="text-sm">Lab results are ready for download</p>
-                    <p className="text-xs text-gray-500 mt-1">1 day ago</p>
+                  <div className="max-h-64 overflow-y-auto">
+                    {notifications.length === 0 ? (
+                      <div className="px-4 py-6 text-center text-sm text-slate-500">
+                        No notifications yet.
+                      </div>
+                    ) : (
+                      notifications.map((notification) => (
+                        <div key={notification.id} className="px-4 py-3 border-b last:border-b-0 hover:bg-slate-50">
+                          <p className="text-sm font-medium text-slate-800">{notification.title}</p>
+                          <p className="text-xs text-slate-500 mt-1">{notification.message}</p>
+                          <p className="text-[11px] text-slate-400 mt-1">
+                            {new Date(notification.created_at).toLocaleString()}
+                          </p>
+                        </div>
+                      ))
+                    )}
                   </div>
                 </div>
-              </div>
-            )}
+              )}
+            </div>
             <div onClick={() => handleMenuClick('/patient/profile')} className="cursor-pointer">
               <Avatar>
                 <AvatarImage src={profileData.profilePic} />

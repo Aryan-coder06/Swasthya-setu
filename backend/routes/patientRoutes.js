@@ -10,6 +10,8 @@ import {
   getPrescriptionReports,
   listPatientAppointmentsHandler,
   bookPatientAppointmentHandler,
+  createAppointmentRequestHandler,
+  listAppointmentRequestsForPatientHandler,
 } from "../controllers/patientController.js";
 import { getNearbyHospitals } from "../controllers/hospitalController.js";
 
@@ -27,5 +29,7 @@ router.post("/prescriptions/list", getPrescriptionReports);
 router.post("/hospitals/nearby", getNearbyHospitals);
 router.post("/appointments/list", listPatientAppointmentsHandler);
 router.post("/appointments/book", bookPatientAppointmentHandler);
+router.post("/appointments/request", createAppointmentRequestHandler);
+router.get("/appointments/requests", listAppointmentRequestsForPatientHandler);
 
 export default router;

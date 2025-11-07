@@ -155,7 +155,7 @@ export default function FamilyMembersPage() {
       >
         <div>
           <h1 className="text-3xl font-bold text-gray-900">Family Members</h1>
-          <p className="text-gray-600 mt-1">Manage your family's health records and appointments</p>
+          <p className="text-gray-600 mt-1">Manage your family&apos;s health records and appointments</p>
         </div>
         <Dialog open={showAddModal} onOpenChange={setShowAddModal}>
           <DialogTrigger asChild>

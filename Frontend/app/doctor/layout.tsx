@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, ReactNode, useMemo } from "react";
+import { useState, useEffect, ReactNode, useMemo, useRef } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import Link from "next/link";
 import { motion } from "framer-motion";
@@ -12,7 +12,12 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Toaster } from "@/components/ui/toaster";
+import { fetchNotifications, markAllNotificationsReadApi } from "@/lib/api";
+import type { NotificationRecord } from "@/lib/types";
+import { useToast } from "@/hooks/use-toast";
 import { DoctorProfileProvider, useDoctorProfile } from "../context/DoctorProfileContext";
+
+const NOTIFICATION_REFRESH_MS = 60_000;
 
 // The UI component that consumes the context
 function DoctorLayoutUI({ children }: { children: ReactNode }) {
@@ -20,8 +25,17 @@ function DoctorLayoutUI({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const { profileData, isDirty, saveProfile } = useDoctorProfile(); 
 
+  const { toast } = useToast();
+
   const [selectedMenu, setSelectedMenu] = useState("dashboard");
   const [isCollapsed, setIsCollapsed] = useState(true);
+  const [doctorId, setDoctorId] = useState<string | null>(null);
+  const [notifications, setNotifications] = useState<NotificationRecord[]>([]);
+  const [unreadCount, setUnreadCount] = useState(0);
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const notificationsRef = useRef<HTMLDivElement>(null);
+  const knownNotificationIds = useRef<Set<string>>(new Set());
+  const notificationsLoaded = useRef(false);
 
   const menuItems = useMemo(
     () => [
@@ -43,6 +57,19 @@ function DoctorLayoutUI({ children }: { children: ReactNode }) {
     []
   );
 
+  useEffect(() => {
+    const storedUser = typeof window !== "undefined" ? localStorage.getItem("user") : null;
+    if (!storedUser) return;
+    try {
+      const parsed = JSON.parse(storedUser);
+      if (parsed?.id) {
+        setDoctorId(parsed.id);
+      }
+    } catch (error) {
+      console.error("Failed to parse stored doctor user", error);
+    }
+  }, []);
+
   // Corrected useEffect to reliably set the active menu item
   useEffect(() => {
     const allItems = [...menuItems, ...bottomMenuItems];
@@ -55,6 +82,83 @@ function DoctorLayoutUI({ children }: { children: ReactNode }) {
       setSelectedMenu(activeItem.id);
     }
   }, [pathname, menuItems, bottomMenuItems]);
+
+  useEffect(() => {
+    if (!doctorId) return;
+    let cancelled = false;
+
+    const loadNotifications = async () => {
+      try {
+        const data = await fetchNotifications({
+          recipientId: doctorId,
+          recipientRole: "doctor",
+          limit: 25,
+        });
+        if (cancelled) return;
+        setNotifications(data);
+        setUnreadCount(data.filter((item) => item.status === "unread").length);
+        const nextIds = new Set<string>();
+        data.forEach((item) => nextIds.add(item.id));
+        if (notificationsLoaded.current) {
+          const newNotifications = data.filter((item) => !knownNotificationIds.current.has(item.id));
+          newNotifications
+            .filter((item) => item.status === "unread")
+            .forEach((item) =>
+              toast({
+                title: item.title,
+                description: item.message,
+              })
+            );
+        } else {
+          notificationsLoaded.current = true;
+        }
+        knownNotificationIds.current = nextIds;
+      } catch (error) {
+        console.error("Failed to load doctor notifications", error);
+      }
+    };
+
+    loadNotifications();
+    const interval = window.setInterval(loadNotifications, NOTIFICATION_REFRESH_MS);
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+    };
+  }, [doctorId, toast]);
+
+  useEffect(() => {
+    const onClickOutside = (event: MouseEvent) => {
+      if (!notificationsOpen) return;
+      if (notificationsRef.current && !notificationsRef.current.contains(event.target as Node)) {
+        setNotificationsOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", onClickOutside);
+    return () => document.removeEventListener("mousedown", onClickOutside);
+  }, [notificationsOpen]);
+
+  const handleToggleNotifications = async () => {
+    const nextState = !notificationsOpen;
+    setNotificationsOpen(nextState);
+    if (nextState && unreadCount > 0 && doctorId) {
+      try {
+        await markAllNotificationsReadApi({
+          recipientId: doctorId,
+          recipientRole: "doctor",
+        });
+        setUnreadCount(0);
+        setNotifications((prev) =>
+          prev.map((notification) => ({
+            ...notification,
+            status: "read",
+            read_at: notification.read_at ?? new Date().toISOString(),
+          }))
+        );
+      } catch (error) {
+        console.error("Failed to mark doctor notifications as read", error);
+      }
+    }
+  };
 
   const handleMenuClick = (route: string) => {
     router.push(route);
@@ -72,10 +176,37 @@ function DoctorLayoutUI({ children }: { children: ReactNode }) {
             <Badge variant="outline" className="bg-green-50 text-green-700">Doctor Portal</Badge>
           </div>
           <div className="flex items-center space-x-4">
-            <Button size="icon" variant="outline" className="relative">
-              <Bell className="w-4 h-4" />
-              <span className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full"></span>
-            </Button>
+            <div className="relative" ref={notificationsRef}>
+              <Button size="icon" variant="outline" className="relative" onClick={handleToggleNotifications}>
+                <Bell className="w-4 h-4" />
+                {unreadCount > 0 && (
+                  <span className="absolute -top-1 -right-1 min-w-[1.2rem] h-5 px-1 bg-red-500 text-white text-xs font-semibold rounded-full flex items-center justify-center">
+                    {unreadCount}
+                  </span>
+                )}
+              </Button>
+              {notificationsOpen && (
+                <div className="absolute right-0 mt-3 w-80 rounded-xl border border-slate-200 bg-white shadow-xl z-50">
+                  <div className="px-4 py-3 border-b">
+                    <p className="text-sm font-semibold text-slate-800">Notifications</p>
+                    <p className="text-xs text-slate-500">Recent updates for your schedule</p>
+                  </div>
+                  <div className="max-h-80 overflow-y-auto">
+                    {notifications.length === 0 ? (
+                      <div className="px-4 py-6 text-center text-sm text-slate-500">No notifications yet.</div>
+                    ) : (
+                      notifications.map((notification) => (
+                        <div key={notification.id} className="px-4 py-3 border-b last:border-b-0">
+                          <p className="text-sm font-medium text-slate-800">{notification.title}</p>
+                          <p className="text-xs text-slate-500 mt-1">{notification.message}</p>
+                          <p className="text-[11px] text-slate-400 mt-1">{new Date(notification.created_at).toLocaleString()}</p>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
             <div onClick={() => handleMenuClick('/doctor/profile')} className="cursor-pointer">
               <Avatar>
                 <AvatarImage src={profileData.profilePic} />

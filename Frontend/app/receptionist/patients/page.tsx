@@ -2,9 +2,9 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { motion } from "framer-motion";
-import { Loader2, Plus, RefreshCw, Search } from "lucide-react";
+import { Loader2, Plus, RefreshCw, Search, Clock } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -33,6 +33,9 @@ import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { Toaster } from "@/components/ui/toaster";
 import { API_BASE_URL } from "@/config/env";
+import { Textarea } from "@/components/ui/textarea";
+import { getReceptionistAppointmentRequests, respondToAppointmentRequestApi } from "@/lib/api";
+import type { AppointmentRequest } from "@/lib/types";
 
 interface Patient {
   id: string;
@@ -81,6 +84,11 @@ export default function ReceptionistPatientPage() {
   const [searchTerm, setSearchTerm] = useState("");
   const [showModal, setShowModal] = useState(false);
   const [formLoading, setFormLoading] = useState(false);
+  const [receptionistId, setReceptionistId] = useState<string | null>(null);
+  const [hospitalId, setHospitalId] = useState<string | null>(null);
+  const [appointmentRequests, setAppointmentRequests] = useState<AppointmentRequest[]>([]);
+  const [requestsLoading, setRequestsLoading] = useState(false);
+  const [doctors, setDoctors] = useState<Array<{ id: string; firstName?: string; lastName?: string; specs?: string | null }>>([]);
 
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
@@ -99,10 +107,15 @@ export default function ReceptionistPatientPage() {
   };
 
   const fetchPatients = useCallback(async () => {
+    if (!hospitalId && !receptionistId) return;
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch(`${API_BASE}/receptionist/patients/all`, {
+      const params = new URLSearchParams();
+      if (hospitalId) params.set("hospitalId", hospitalId);
+      if (!hospitalId && receptionistId) params.set("receptionistId", receptionistId);
+      const query = params.toString() ? `?${params.toString()}` : "";
+      const res = await fetch(`${API_BASE}/receptionist/patients/all${query}`, {
         cache: "no-store",
       });
       if (!res.ok) {
@@ -123,11 +136,77 @@ export default function ReceptionistPatientPage() {
     } finally {
       setLoading(false);
     }
-  }, [API_BASE, toast]);
+  }, [API_BASE, toast, hospitalId, receptionistId]);
+
+  const fetchDoctors = useCallback(async () => {
+    if (!hospitalId && !receptionistId) return;
+    try {
+      const params = new URLSearchParams();
+      if (hospitalId) params.set("hospitalId", hospitalId);
+      if (!hospitalId && receptionistId) params.set("receptionistId", receptionistId);
+      const query = params.toString() ? `?${params.toString()}` : "";
+      const res = await fetch(`${API_BASE}/receptionist/doctors/all${query}`, {
+        cache: "no-store",
+      });
+      if (!res.ok) {
+        const payload = await res.json().catch(() => ({}));
+        throw new Error(payload.error || "Unable to load doctors");
+      }
+      const data = await res.json();
+      setDoctors(Array.isArray(data) ? data : []);
+    } catch (err) {
+      console.error("Doctor fetch error:", err);
+      setDoctors([]);
+    }
+  }, [API_BASE, hospitalId, receptionistId]);
+
+  const fetchAppointmentRequests = useCallback(async () => {
+    if (!receptionistId) return;
+    setRequestsLoading(true);
+    try {
+      const response = await getReceptionistAppointmentRequests({
+        receptionistId,
+        status: "pending",
+      });
+      setAppointmentRequests(response.requests);
+    } catch (err: any) {
+      console.error("Failed to load appointment requests", err);
+      toast({
+        title: "Unable to load requests",
+        description: err?.message || "Please try again later.",
+        variant: "destructive",
+      });
+    } finally {
+      setRequestsLoading(false);
+    }
+  }, [receptionistId, toast]);
 
   useEffect(() => {
+    const storedUser = typeof window !== "undefined" ? localStorage.getItem("user") : null;
+    if (!storedUser) return;
+    try {
+      const parsed = JSON.parse(storedUser);
+      if (parsed?.id) {
+        setReceptionistId(parsed.id);
+      }
+      const hosp = parsed?.hospitalId ?? parsed?.hospital_id ?? null;
+      if (hosp) {
+        setHospitalId(hosp);
+      }
+    } catch (error) {
+      console.error("Failed to parse receptionist info", error);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!hospitalId && !receptionistId) return;
     fetchPatients();
-  }, [fetchPatients]);
+    fetchDoctors();
+  }, [fetchPatients, fetchDoctors, hospitalId, receptionistId]);
+
+  useEffect(() => {
+    fetchAppointmentRequests();
+  }, [fetchAppointmentRequests]);
 
   const filteredPatients = useMemo(() => {
     const term = searchTerm.trim().toLowerCase();
@@ -210,6 +289,7 @@ export default function ReceptionistPatientPage() {
       });
       setShowModal(false);
       resetForm();
+      fetchPatients();
     } catch (err: any) {
       toast({
         title: "Registration failed",
@@ -220,6 +300,81 @@ export default function ReceptionistPatientPage() {
       setFormLoading(false);
     }
   };
+
+  const [respondDialogOpen, setRespondDialogOpen] = useState(false);
+  const [currentRequest, setCurrentRequest] = useState<AppointmentRequest | null>(null);
+  const [responseMode, setResponseMode] = useState<"accept" | "decline">("accept");
+  const [selectedDoctor, setSelectedDoctor] = useState<string>("");
+  const [selectedDate, setSelectedDate] = useState<string>("");
+  const [selectedTime, setSelectedTime] = useState<string>("");
+  const [declineReason, setDeclineReason] = useState<string>("");
+  const [notes, setNotes] = useState<string>("");
+  const [responding, setResponding] = useState(false);
+
+  const openRespondDialog = (request: AppointmentRequest, mode: "accept" | "decline") => {
+    setCurrentRequest(request);
+    setResponseMode(mode);
+    setSelectedDoctor("");
+    setSelectedDate(request.preferred_date ?? "");
+    setSelectedTime(request.preferred_time ?? "");
+    setDeclineReason("");
+    setNotes(request.notes ?? "");
+    setRespondDialogOpen(true);
+  };
+
+  const handleRespond = async () => {
+    if (!currentRequest || !receptionistId) return;
+    try {
+      setResponding(true);
+      if (responseMode === "accept") {
+        if (!selectedDoctor || !selectedDate || !selectedTime) {
+          toast({
+            title: "Missing details",
+            description: "Select doctor, date, and time to confirm the appointment.",
+            variant: "destructive",
+          });
+          return;
+        }
+      }
+
+      await respondToAppointmentRequestApi({
+        requestId: currentRequest.id,
+        action: responseMode,
+        receptionistId,
+        doctorId: responseMode === "accept" ? selectedDoctor : undefined,
+        appointmentDate: responseMode === "accept" ? selectedDate : undefined,
+        appointmentTime: responseMode === "accept" ? selectedTime : undefined,
+        declineReason: responseMode === "decline" ? declineReason : undefined,
+        notes: notes || undefined,
+      });
+
+      toast({
+        title: responseMode === "accept" ? "Appointment scheduled" : "Request declined",
+        description:
+          responseMode === "accept"
+            ? "The patient and doctor have been notified."
+            : "The patient has been informed of the decision.",
+      });
+
+      setRespondDialogOpen(false);
+      fetchAppointmentRequests();
+      fetchPatients();
+    } catch (error: any) {
+      toast({
+        title: "Action failed",
+        description: error?.message || "Unable to process the request right now.",
+        variant: "destructive",
+      });
+    } finally {
+      setResponding(false);
+    }
+  };
+
+  useEffect(() => {
+    if (doctors.length && !selectedDoctor) {
+      setSelectedDoctor(doctors[0].id);
+    }
+  }, [doctors, selectedDoctor]);
 
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-6">
@@ -361,6 +516,76 @@ export default function ReceptionistPatientPage() {
 
       <Card>
         <CardHeader>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle className="flex items-center gap-2">
+                <Clock className="w-5 h-5 text-purple-500" /> Pending Appointment Requests
+              </CardTitle>
+              <CardDescription>
+                Review patient requests awaiting confirmation for your hospital.
+              </CardDescription>
+            </div>
+            <Badge variant="outline">
+              {appointmentRequests.length} awaiting action
+            </Badge>
+          </div>
+        </CardHeader>
+        <CardContent>
+          {requestsLoading ? (
+            <div className="space-y-2">
+              {[...Array(3)].map((_, idx) => (
+                <div key={idx} className="h-16 rounded-lg border animate-pulse bg-slate-100" />
+              ))}
+            </div>
+          ) : appointmentRequests.length === 0 ? (
+            <p className="text-sm text-slate-500">
+              No appointment requests are pending right now.
+            </p>
+          ) : (
+            <div className="space-y-3">
+              {appointmentRequests.map((request) => (
+                <div
+                  key={request.id}
+                  className="rounded-xl border p-4 flex flex-col gap-2 md:flex-row md:items-center md:justify-between"
+                >
+                  <div>
+                    <p className="text-sm font-semibold text-slate-900">
+                      {request.patient_name || "Patient"}
+                    </p>
+                    <p className="text-xs text-slate-500">
+                      Preferred: {request.preferred_date ?? "Any day"} · {request.preferred_time ?? "Any time"}
+                    </p>
+                    {request.notes && (
+                      <p className="text-xs text-slate-500 mt-1">
+                        Notes: {request.notes}
+                      </p>
+                    )}
+                  </div>
+                  <div className="flex gap-2">
+                    <Button
+                      size="sm"
+                      onClick={() => openRespondDialog(request, "accept")}
+                      className="bg-emerald-600 hover:bg-emerald-700"
+                    >
+                      Accept
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => openRespondDialog(request, "decline")}
+                    >
+                      Decline
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
           <div className="relative">
             <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
             <Input
@@ -429,6 +654,93 @@ export default function ReceptionistPatientPage() {
           )}
         </CardContent>
       </Card>
+
+      <Dialog open={respondDialogOpen} onOpenChange={setRespondDialogOpen}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>
+              {responseMode === "accept" ? "Confirm appointment details" : "Decline appointment request"}
+            </DialogTitle>
+            <CardDescription>
+              {currentRequest?.patient_name || "Patient"} · {currentRequest?.hospital_name || "Assigned hospital"}
+            </CardDescription>
+          </DialogHeader>
+          {responseMode === "accept" ? (
+            <div className="space-y-4 py-2">
+              <div>
+                <Label>Assign doctor</Label>
+                <Select value={selectedDoctor} onValueChange={setSelectedDoctor}>
+                  <SelectTrigger className="mt-1">
+                    <SelectValue placeholder="Select doctor" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {doctors.length === 0 && <SelectItem value="" disabled>No doctors found</SelectItem>}
+                    {doctors.map((doctor) => (
+                      <SelectItem key={doctor.id} value={doctor.id}>
+                        Dr. {doctor.firstName ?? ""} {doctor.lastName ?? ""}
+                        {doctor.specs ? ` · ${doctor.specs}` : ""}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label htmlFor="appointment-date">Date</Label>
+                  <Input
+                    id="appointment-date"
+                    type="date"
+                    value={selectedDate}
+                    onChange={(event) => setSelectedDate(event.target.value)}
+                    className="mt-1"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="appointment-time">Time</Label>
+                  <Input
+                    id="appointment-time"
+                    type="time"
+                    value={selectedTime}
+                    onChange={(event) => setSelectedTime(event.target.value)}
+                    className="mt-1"
+                  />
+                </div>
+              </div>
+              <div>
+                <Label htmlFor="notes">Notes (optional)</Label>
+                <Textarea
+                  id="notes"
+                  value={notes}
+                  onChange={(event) => setNotes(event.target.value)}
+                  className="mt-1"
+                  placeholder="Add any additional information for the patient or doctor"
+                />
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-4 py-2">
+              <div>
+                <Label htmlFor="decline-reason">Reason</Label>
+                <Textarea
+                  id="decline-reason"
+                  value={declineReason}
+                  onChange={(event) => setDeclineReason(event.target.value)}
+                  placeholder="Share a brief reason to help the patient understand."
+                  className="mt-1"
+                />
+              </div>
+            </div>
+          )}
+          <div className="flex justify-end gap-2 pt-2">
+            <Button variant="outline" onClick={() => setRespondDialogOpen(false)} disabled={responding}>
+              Cancel
+            </Button>
+            <Button onClick={handleRespond} disabled={responding}>
+              {responding ? "Saving..." : responseMode === "accept" ? "Confirm" : "Submit"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <Toaster />
     </motion.div>
