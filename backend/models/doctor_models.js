@@ -135,6 +135,29 @@ const getDoctorAppointments = async (doctorId, options = {}) => {
   };
 };
 
+const resolvePatientDisplayName = async (patientId, providedName) => {
+  if (typeof providedName === "string" && providedName.trim().length) {
+    return providedName.trim();
+  }
+
+  if (patientId) {
+    const { data, error } = await supabase
+      .from("Patient_Profile")
+      .select("firstName, lastName")
+      .eq("id", patientId)
+      .maybeSingle();
+
+    if (!error && data) {
+      const fullName = [data.firstName, data.lastName].filter(Boolean).join(" ").trim();
+      if (fullName) {
+        return fullName;
+      }
+    }
+  }
+
+  return "Patient";
+};
+
 const createDoctorAppointment = async (doctorId, payload) => {
   const {
     patientId = null,
@@ -188,10 +211,12 @@ const createDoctorAppointment = async (doctorId, payload) => {
     };
   }
 
+  const patientDisplayName = await resolvePatientDisplayName(patientId, patientName);
+
   const insertBody = {
     doctor_id: doctorId,
     patient_id: patientId,
-    patient_name: patientName,
+    patient_name: patientDisplayName,
     appointment_date: appointmentDate,
     appointment_time: appointmentTime,
     start_at: startIso,

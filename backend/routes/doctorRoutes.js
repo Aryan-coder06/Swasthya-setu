@@ -15,7 +15,9 @@ import {
   listDoctorDirectory,
   createPrescription,
   analyzePrescription,
+  getPrescriptionsByPatientId,
 } from "../controllers/doctorController.js";
+import { getPrescriptionById } from "../models/doctor_models.js";
 
 const router = express.Router();
 
@@ -29,6 +31,8 @@ router.put("/profile/:doctorId", updateDoctorProfileHandler);
 
 router.get("/:doctorId/dashboard", getDashboardSummary);
 router.get("/analytics/stats/:doctorId", getAnalyticsStats);
+// router.get("/")
+
 
 router.get("/:doctorId/appointments", listDoctorAppointments);
 router.post("/:doctorId/appointments", createDoctorAppointmentHandler);
@@ -42,5 +46,6 @@ router.get("/:doctorId/consultations", listDoctorConsultations);
 
 router.post("/prescriptions", createPrescription);
 router.post("/prescriptions/:id/analyze", analyzePrescription);
+router.post("/prescriptions/:patientId", getPrescriptionsByPatientId);
 
 export default router;

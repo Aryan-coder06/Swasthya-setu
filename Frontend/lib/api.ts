@@ -268,11 +268,11 @@ export async function updateReceptionistProfileApi(
   return normaliseReceptionist(json?.data);
 }
 
-export async function createWalkInTicketApi(patientName: string): Promise<WalkInTicket> {
+export async function createWalkInTicketApi(patientName: string, receptionistId: string): Promise<WalkInTicket> {
   const res = await fetch(apiRoute("/receptionist/walkin/create"), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ patientName }),
+    body: JSON.stringify({ patientName, receptionistId }),
   });
   const json: ApiJson<WalkInTicket> = await res.json();
   if (!res.ok || !json.data) {
@@ -312,7 +312,7 @@ export async function createInvoiceApi(payload: {
   patientName: string;
   amount: number;
   services?: string[];
-}): Promise<InvoiceRecord> {
+}, receptionistId: string): Promise<InvoiceRecord> {
   const res = await fetch(apiRoute("/receptionist/billing/create"), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -320,6 +320,7 @@ export async function createInvoiceApi(payload: {
       patientName: payload.patientName,
       amount: payload.amount,
       services: payload.services ?? [],
+      receptionistId,
     }),
   });
   const json: ApiJson<InvoiceRecord> = await res.json();
@@ -329,8 +330,10 @@ export async function createInvoiceApi(payload: {
   return json.data;
 }
 
-export async function fetchInvoicesApi(): Promise<InvoiceRecord[]> {
-  const res = await fetch(apiRoute("/receptionist/billing/all"));
+export async function fetchInvoicesApi(receptionistId: string): Promise<InvoiceRecord[]> {
+  const url = new URL(apiRoute("/receptionist/billing/all"));
+  url.searchParams.set("receptionistId", receptionistId);
+  const res = await fetch(url.toString());
   const json: ApiJson<InvoiceRecord[]> = await res.json();
   if (!res.ok) {
     throw new Error(json.error || "Failed to load invoices.");

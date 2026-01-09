@@ -40,6 +40,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Separator } from "@/components/ui/separator";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useToast } from "@/hooks/use-toast";
+import Stepper, { Step } from "@/components/Stepper";
 
 const RISK_META: Record<
   RiskColor,
@@ -396,6 +397,8 @@ export default function PrescriptionAnalyzerPage() {
   const [patientId, setPatientId] = useState<string | null>(null);
   const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "success" | "error">("idle");
   const [lastSavedAt, setLastSavedAt] = useState<string | null>(null);
+  const [analysisStep, setAnalysisStep] = useState(1);
+  const [analysisFailed, setAnalysisFailed] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -439,6 +442,8 @@ export default function PrescriptionAnalyzerPage() {
         setImagePreviewUrl(URL.createObjectURL(selectedFile));
         setResult(null);
         setStatus("idle");
+        setAnalysisStep(1);
+        setAnalysisFailed(false);
       }
     },
     [imagePreviewUrl]
@@ -464,6 +469,8 @@ export default function PrescriptionAnalyzerPage() {
     setStatus("idle");
     setSaveStatus("idle");
     setLastSavedAt(null);
+    setAnalysisStep(1);
+    setAnalysisFailed(false);
     if (fileInputRef.current) {
       fileInputRef.current.value = "";
     }
@@ -480,6 +487,8 @@ export default function PrescriptionAnalyzerPage() {
     setSaveStatus("idle");
     setLastSavedAt(null);
     setResult(null);
+    setAnalysisStep(1);
+    setAnalysisFailed(false);
 
     try {
       const base64Image = await new Promise<string>((resolve, reject) => {
@@ -493,15 +502,20 @@ export default function PrescriptionAnalyzerPage() {
         reader.readAsDataURL(file);
       });
 
+      setAnalysisStep(2);
+      setAnalysisStep(3);
       const response = await analyzePrescription(base64Image);
       setResult(response);
       setStatus(response.status === "success" ? "success" : "error");
       if (response.status === "success") {
+        setAnalysisStep(4);
         toast({
           title: "Report ready",
           description: "We’ve generated a personalized summary for you.",
         });
       } else {
+        setAnalysisFailed(true);
+        setAnalysisStep(4);
         toast({
           title: "Analysis failed",
           description: response.message || "Something went wrong.",
@@ -511,6 +525,8 @@ export default function PrescriptionAnalyzerPage() {
     } catch (error: any) {
       console.error("Analysis Failed:", error);
       setStatus("error");
+      setAnalysisFailed(true);
+      setAnalysisStep(4);
       const message = error?.message || "Unable to analyze the prescription.";
       setResult({ status: "error", message, report: null });
       toast({
@@ -678,6 +694,65 @@ export default function PrescriptionAnalyzerPage() {
             </div>
           </CardContent>
         </Card>
+
+        {status === "loading" && (
+          <Card className="border border-slate-200/70 bg-white/80 shadow-sm">
+            <CardHeader>
+              <CardTitle>Live analysis status</CardTitle>
+              <CardDescription>
+                We’ll advance each stage as your prescription moves through OCR and AI summarization.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Stepper
+                key={analysisStep}
+                initialStep={analysisStep}
+                disableStepIndicators
+                footerClassName="hidden"
+                contentClassName="px-6 pb-6"
+                stepCircleContainerClassName="border border-slate-200/80 bg-white"
+                style={{ minHeight: "auto", padding: 0, aspectRatio: "auto" }}
+              >
+                <Step>
+                  <div className="space-y-2">
+                    <p className="text-sm font-semibold text-slate-900">Image captured</p>
+                    <p className="text-sm text-muted-foreground">
+                      We are prepping your file for OCR extraction.
+                    </p>
+                  </div>
+                </Step>
+                <Step>
+                  <div className="space-y-2">
+                    <p className="text-sm font-semibold text-slate-900">Running OCR</p>
+                    <p className="text-sm text-muted-foreground">
+                      Extracting medications, vitals, and handwritten notes.
+                    </p>
+                  </div>
+                </Step>
+                <Step>
+                  <div className="space-y-2">
+                    <p className="text-sm font-semibold text-slate-900">AI synthesis</p>
+                    <p className="text-sm text-muted-foreground">
+                      Generating patient-friendly summaries and risk flags.
+                    </p>
+                  </div>
+                </Step>
+                <Step>
+                  <div className="space-y-2">
+                    <p className="text-sm font-semibold text-slate-900">
+                      {analysisFailed ? "Analysis interrupted" : "Report ready"}
+                    </p>
+                    <p className="text-sm text-muted-foreground">
+                      {analysisFailed
+                        ? "Something went wrong. Please retry the analysis."
+                        : "Preparing your report cards and recommendations."}
+                    </p>
+                  </div>
+                </Step>
+              </Stepper>
+            </CardContent>
+          </Card>
+        )}
 
         <div>
           {status === "success" && result?.report && (

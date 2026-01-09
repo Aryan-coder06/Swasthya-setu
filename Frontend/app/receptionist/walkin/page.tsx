@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { motion } from "framer-motion";
 import { Plus, Printer, Loader2, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -30,14 +30,37 @@ export default function ReceptionistWalkinPage() {
   const [error, setError] = useState<string | null>(null);
   const [showModal, setShowModal] = useState(false);
   const [formLoading, setFormLoading] = useState(false);
-  const [patientName, setPatientName] = useState("");
+const [patientName, setPatientName] = useState("");
+  const [receptionistId, setReceptionistId] = useState<string | null>(null);
+  const [hospitalId, setHospitalId] = useState<string | null>(null);
+
+  useEffect(() => {
+    const storedUser = typeof window !== "undefined" ? localStorage.getItem("user") : null;
+    if (!storedUser) return;
+    try {
+      const parsed = JSON.parse(storedUser);
+      if (parsed?.id) setReceptionistId(parsed.id);
+      const hospital = parsed?.hospitalId ?? parsed?.hospital_id ?? null;
+      if (hospital) setHospitalId(hospital);
+    } catch (error) {
+      console.error("Failed to parse receptionist info", error);
+    }
+  }, []);
 
   /* ------------------- FETCH TODAY'S TICKETS ------------------- */
-  const fetchTickets = async () => {
+  const fetchTickets = useCallback(async () => {
+    if (!receptionistId && !hospitalId) return;
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch(`${API_BASE}/receptionist/walkin/today`, { cache: "no-store" });
+      const params = new URLSearchParams();
+      if (hospitalId) {
+        params.set("hospitalId", hospitalId);
+      } else if (receptionistId) {
+        params.set("receptionistId", receptionistId);
+      }
+      const query = params.toString() ? `?${params.toString()}` : "";
+      const res = await fetch(`${API_BASE}/receptionist/walkin/today${query}`, { cache: "no-store" });
       if (!res.ok) throw new Error((await res.json()).error || `HTTP ${res.status}`);
       const data: WalkinTicket[] = await res.json();
       setTickets(data);
@@ -47,11 +70,11 @@ export default function ReceptionistWalkinPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [API_BASE, hospitalId, receptionistId, toast]);
 
   useEffect(() => {
     fetchTickets();
-  }, []);
+  }, [fetchTickets]);
 
   /* ------------------- CREATE TICKET ------------------- */
   const handleGenerateTicket = async (e: React.FormEvent) => {
@@ -59,12 +82,17 @@ export default function ReceptionistWalkinPage() {
     setFormLoading(true);
 
     const name = patientName.trim() || "Anonymous Patient";
+    if (!receptionistId) {
+      toast({ title: "Missing receptionist session", description: "Sign in again to generate tickets.", variant: "destructive" });
+      setFormLoading(false);
+      return;
+    }
 
     try {
       const res = await fetch(`${API_BASE}/receptionist/walkin/create`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ patientName: name }),
+        body: JSON.stringify({ patientName: name, receptionistId }),
       });
 
       const result = await res.json();
@@ -83,13 +111,18 @@ export default function ReceptionistWalkinPage() {
 
   /* ------------------- UPDATE STATUS ------------------- */
 const updateStatus = async (ticketId: number, status: "serving" | "completed") => {
+  if (!receptionistId) {
+    toast({ title: "Missing receptionist session", description: "Sign in again to update tickets.", variant: "destructive" });
+    return;
+  }
   try {
     const res = await fetch(`${API_BASE}/receptionist/walkin/update-status`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ 
         ticketId,  
-        status 
+        status,
+        receptionistId,
       }),
     });
 

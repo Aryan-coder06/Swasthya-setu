@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import { motion } from "framer-motion";
 import {
   CreditCard,
@@ -57,6 +57,21 @@ export default function ReceptionistBillingPage() {
   const [showModal, setShowModal] = useState(false);
   const [formLoading, setFormLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
+  const [receptionistId, setReceptionistId] = useState<string | null>(null);
+  const [hospitalId, setHospitalId] = useState<string | null>(null);
+
+  useEffect(() => {
+    const storedUser = typeof window !== "undefined" ? localStorage.getItem("user") : null;
+    if (!storedUser) return;
+    try {
+      const parsed = JSON.parse(storedUser);
+      if (parsed?.id) setReceptionistId(parsed.id);
+      const hospital = parsed?.hospitalId ?? parsed?.hospital_id ?? null;
+      if (hospital) setHospitalId(hospital);
+    } catch (error) {
+      console.error("Failed to parse receptionist info", error);
+    }
+  }, []);
   const [statusFilter, setStatusFilter] = useState<"all" | "pending" | "paid">("all");
 
   // Form state
@@ -64,11 +79,23 @@ export default function ReceptionistBillingPage() {
   const [services, setServices] = useState<Service[]>([{ name: "", amount: 0 }]);
 
   /* ------------------- FETCH INVOICES ------------------- */
-  const fetchInvoices = async () => {
+  const fetchInvoices = useCallback(async () => {
+    if (!receptionistId && !hospitalId) {
+      setLoading(false);
+      setError("Missing receptionist session");
+      return;
+    }
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch(`${API_BASE}/receptionist/billing/all`, { cache: "no-store" });
+      const params = new URLSearchParams();
+      if (hospitalId) {
+        params.set("hospitalId", hospitalId);
+      } else if (receptionistId) {
+        params.set("receptionistId", receptionistId);
+      }
+      const query = params.toString() ? `?${params.toString()}` : "";
+      const res = await fetch(`${API_BASE}/receptionist/billing/all${query}`, { cache: "no-store" });
       if (!res.ok) throw new Error((await res.json()).error || `HTTP ${res.status}`);
       const data: Invoice[] = await res.json();
       setInvoices(data);
@@ -78,11 +105,11 @@ export default function ReceptionistBillingPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [API_BASE, hospitalId, receptionistId, toast]);
 
   useEffect(() => {
     fetchInvoices();
-  }, []);
+  }, [fetchInvoices]);
 
   /* ------------------- ADD/REMOVE SERVICE ------------------- */
   const addService = () => {
@@ -119,6 +146,12 @@ export default function ReceptionistBillingPage() {
       return;
     }
 
+    if (!receptionistId) {
+      toast({ title: "Missing receptionist session", description: "Sign in again to create invoices.", variant: "destructive" });
+      setFormLoading(false);
+      return;
+    }
+
     try {
       const res = await fetch(`${API_BASE}/receptionist/billing/create`, {
         method: "POST",
@@ -127,6 +160,7 @@ export default function ReceptionistBillingPage() {
           patientName: patientName.trim(),
           amount: totalAmount,
           services: validServices,
+          receptionistId,
         }),
       });
 
@@ -147,11 +181,15 @@ export default function ReceptionistBillingPage() {
 
   /* ------------------- UPDATE STATUS ------------------- */
   const handleStatusUpdate = async (invoiceId: number, newStatus: "paid" | "pending") => {
+    if (!receptionistId) {
+      toast({ title: "Missing receptionist session", description: "Sign in again to update invoices.", variant: "destructive" });
+      return;
+    }
     try {
       const res = await fetch(`${API_BASE}/receptionist/billing/update-status`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ invoiceId, status: newStatus }),
+        body: JSON.stringify({ invoiceId, status: newStatus, receptionistId }),
       });
       if (!res.ok) throw new Error((await res.json()).error);
       await fetchInvoices();

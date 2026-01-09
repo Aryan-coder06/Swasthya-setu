@@ -1,4 +1,5 @@
 import "./globals.css";
+import "@/components/Stepper.css";
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import ClickSpark from "@/components/ui/click-spark";

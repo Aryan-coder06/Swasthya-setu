@@ -139,10 +139,18 @@ export default function ReceptionistDashboardPage() {
   const pendingRequestIdsRef = useRef<Set<string>>(new Set());
 
   const handleOpenPrintDialog = useCallback(async () => {
+    if (!receptionistId) {
+      pushToast({
+        title: "Missing receptionist session",
+        description: "Please reload and sign in again to access invoices.",
+        variant: "destructive",
+      });
+      return;
+    }
     setPrintDialogOpen(true);
     setInvoicesLoading(true);
     try {
-      const records = await fetchInvoicesApi();
+      const records = await fetchInvoicesApi(receptionistId);
       setInvoices(records);
       if (records.length) {
         setSelectedInvoiceId(records[0].id);
@@ -159,12 +167,19 @@ export default function ReceptionistDashboardPage() {
     } finally {
       setInvoicesLoading(false);
     }
-  }, [pushToast]);
+  }, [pushToast, receptionistId]);
 
   const loadDashboard = useCallback(async () => {
     if (!hospitalId && !receptionistId) return;
     try {
-      const statsRes = await fetch(`${API_BASE_URL}/receptionist/dashboard/stats`);
+      const statsParams = new URLSearchParams();
+      if (hospitalId) {
+        statsParams.set("hospitalId", hospitalId);
+      } else if (receptionistId) {
+        statsParams.set("receptionistId", receptionistId);
+      }
+      const statsQuery = statsParams.toString() ? `?${statsParams.toString()}` : "";
+      const statsRes = await fetch(`${API_BASE_URL}/receptionist/dashboard/stats${statsQuery}`);
       if (!statsRes.ok) throw new Error("Failed to fetch stats");
       const statsJson = await statsRes.json();
       setStats(statsJson ?? {});
@@ -187,9 +202,17 @@ export default function ReceptionistDashboardPage() {
   }, [receptionistId, hospitalId]);
 
   const handleCreateWalkInTicket = useCallback(async () => {
+    if (!receptionistId) {
+      pushToast({
+        title: "Missing receptionist session",
+        description: "Please sign in again to create walk-in tickets.",
+        variant: "destructive",
+      });
+      return;
+    }
     try {
       setCreatingWalkIn(true);
-      const ticket = await createWalkInTicketApi(walkInPatientName.trim());
+      const ticket = await createWalkInTicketApi(walkInPatientName.trim(), receptionistId);
       pushToast({
         title: "Walk-in ticket created",
         description: `Ticket ${ticket.ticket_number} is queued.`,
@@ -210,7 +233,7 @@ export default function ReceptionistDashboardPage() {
     } finally {
       setCreatingWalkIn(false);
     }
-  }, [pushToast, walkInPatientName]);
+  }, [pushToast, receptionistId, walkInPatientName]);
 
   const handleCreateAppointment = useCallback(async () => {
     if (!appointmentDoctorId || !appointmentDateInput || !appointmentTimeInput) {
@@ -262,6 +285,14 @@ export default function ReceptionistDashboardPage() {
   ]);
 
   const handleCreateInvoice = useCallback(async () => {
+    if (!receptionistId) {
+      pushToast({
+        title: "Missing receptionist session",
+        description: "Please sign in again to create invoices.",
+        variant: "destructive",
+      });
+      return;
+    }
     const amountValue = Number(paymentAmount);
     if (!paymentPatientName.trim() || Number.isNaN(amountValue) || amountValue <= 0) {
       pushToast({
@@ -277,11 +308,14 @@ export default function ReceptionistDashboardPage() {
         .split(",")
         .map((service) => service.trim())
         .filter(Boolean);
-      await createInvoiceApi({
-        patientName: paymentPatientName.trim(),
-        amount: amountValue,
-        services,
-      });
+      await createInvoiceApi(
+        {
+          patientName: paymentPatientName.trim(),
+          amount: amountValue,
+          services,
+        },
+        receptionistId
+      );
       pushToast({
         title: "Invoice created",
         description: "Invoice saved and ready for payment processing.",
@@ -304,7 +338,7 @@ export default function ReceptionistDashboardPage() {
     } finally {
       setCreatingInvoice(false);
     }
-  }, [paymentAmount, paymentPatientName, paymentServices, pushToast]);
+  }, [paymentAmount, paymentPatientName, paymentServices, pushToast, receptionistId]);
 
   const handlePrintInvoice = useCallback(() => {
     if (!selectedInvoiceId) {

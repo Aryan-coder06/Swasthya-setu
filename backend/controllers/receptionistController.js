@@ -4,7 +4,6 @@ import {
   update_appointment_status,
   register_patient,
   get_all_patients,
-  search_patients,
   create_walkin_ticket,
   get_today_walkin_tickets,
   update_walkin_status,
@@ -25,9 +24,42 @@ import {
   get_receptionist_profile_by_id,
   update_receptionist_profile,
 } from "../models/receptionist.js";
+
+const resolveHospitalContext = async ({ hospitalId, receptionistId } = {}) => {
+  if (hospitalId) {
+    return { hospitalId };
+  }
+  if (!receptionistId) {
+    return { error: "hospitalId or receptionistId is required for this action." };
+  }
+
+  const { data, error } = await supabase
+    .from("receptionist_profile")
+    .select("hospital_id")
+    .eq("id", receptionistId)
+    .maybeSingle();
+
+  if (error || !data?.hospital_id) {
+    console.error("Failed to resolve receptionist hospital:", error);
+    return { error: "Receptionist profile not found or missing hospital mapping." };
+  }
+
+  return { hospitalId: data.hospital_id };
+};
+
+const extractHospitalArgs = (req) => ({
+  hospitalId: req.body?.hospitalId || req.query?.hospitalId || null,
+  receptionistId: req.body?.receptionistId || req.query?.receptionistId || null,
+});
 const getDashboardStats = async (req, res) => {
   try {
-    const { data, error } = await get_dashboard_stats();
+    const context = extractHospitalArgs(req);
+    const { hospitalId, error: contextError } = await resolveHospitalContext(context);
+    if (contextError) {
+      return res.status(400).json({ error: contextError });
+    }
+
+    const { data, error } = await get_dashboard_stats(hospitalId);
     if (error) {
       return res.status(400).json({ error });
     }
@@ -41,9 +73,29 @@ const getDashboardStats = async (req, res) => {
 const createAppointment = async (req, res) => {
   try {
     const { patientId, patientName, doctorId, date, time, status } = req.body ?? {};
-
     if (!doctorId || !date || !time) {
       return res.status(400).json({ error: "doctorId, date, and time are required to create an appointment." });
+    }
+
+    const context = extractHospitalArgs(req);
+    const { hospitalId, error: contextError } = await resolveHospitalContext(context);
+    if (contextError) {
+      return res.status(400).json({ error: contextError });
+    }
+
+    const { data: doctorProfile, error: doctorLookupError } = await supabase
+      .from("Doctor_Profile")
+      .select("id, hospital_id")
+      .eq("id", doctorId)
+      .maybeSingle();
+
+    if (doctorLookupError || !doctorProfile) {
+      console.error("Doctor lookup error:", doctorLookupError);
+      return res.status(404).json({ error: "Doctor not found." });
+    }
+
+    if (doctorProfile.hospital_id !== hospitalId) {
+      return res.status(403).json({ error: "Doctor does not belong to your hospital." });
     }
 
     const { data, error } = await create_appointment({
@@ -59,7 +111,7 @@ const createAppointment = async (req, res) => {
 
     res.status(201).json({
       message: "Appointment created successfully",
-      data
+      data,
     });
   } catch (error) {
     console.error("Create appointment error:", error);
@@ -226,12 +278,17 @@ const getAllPatients = async (req, res) => {
 const searchPatients = async (req, res) => {
   try {
     const { searchTerm } = req.query;
-    
     if (!searchTerm) {
       return res.status(400).json({ error: "Search term is required" });
     }
 
-    const { data, error } = await search_patients(searchTerm);
+    const context = extractHospitalArgs(req);
+    const { hospitalId, error: contextError } = await resolveHospitalContext(context);
+    if (contextError) {
+      return res.status(400).json({ error: contextError });
+    }
+
+    const { data, error } = await get_all_patients(hospitalId, searchTerm);
     
     if (error) {
       return res.status(400).json({ error });
@@ -247,8 +304,17 @@ const searchPatients = async (req, res) => {
 const createWalkinTicket = async (req, res) => {
   try {
     const { patientName } = req.body;
+    const context = extractHospitalArgs(req);
+    if (!context.receptionistId) {
+      return res.status(400).json({ error: "receptionistId is required to create a walk-in ticket." });
+    }
 
-    const { data, error } = await create_walkin_ticket(patientName);
+    const { hospitalId, error: contextError } = await resolveHospitalContext(context);
+    if (contextError) {
+      return res.status(400).json({ error: contextError });
+    }
+    
+    const { data, error } = await create_walkin_ticket(patientName, hospitalId, context.receptionistId);
     
     if (error) {
       return res.status(400).json({ error });
@@ -263,7 +329,13 @@ const createWalkinTicket = async (req, res) => {
 
 const getTodayWalkinTickets = async (req, res) => {
   try {
-    const { data, error } = await get_today_walkin_tickets();
+    const context = extractHospitalArgs(req);
+    const { hospitalId, error: contextError } = await resolveHospitalContext(context);
+    if (contextError) {
+      return res.status(400).json({ error: contextError });
+    }
+
+    const { data, error } = await get_today_walkin_tickets(hospitalId);
     
     if (error) {
       return res.status(400).json({ error });
@@ -279,12 +351,17 @@ const getTodayWalkinTickets = async (req, res) => {
 const updateWalkinStatus = async (req, res) => {
   try {
     const { ticketId, status } = req.body;
+    const context = extractHospitalArgs(req);
+    const { hospitalId, error: contextError } = await resolveHospitalContext(context);
+    if (contextError) {
+      return res.status(400).json({ error: contextError });
+    }
     
     if (!ticketId || !status) {
       return res.status(400).json({ error: "Ticket ID and status are required" });
     }
 
-    const { data, error } = await update_walkin_status(ticketId, status);
+    const { data, error } = await update_walkin_status(ticketId, status, hospitalId);
     
     if (error) {
       return res.status(400).json({ error });
@@ -300,12 +377,22 @@ const updateWalkinStatus = async (req, res) => {
 const createInvoice = async (req, res) => {
   try {
     const invoiceData = req.body;
-    
+
+    const context = extractHospitalArgs(req);
+    if (!context.receptionistId) {
+      return res.status(400).json({ error: "receptionistId is required to create invoices." });
+    }
+
+    const { hospitalId, error: contextError } = await resolveHospitalContext(context);
+    if (contextError) {
+      return res.status(400).json({ error: contextError });
+    }
+
     if (!invoiceData.patientName || !invoiceData.amount) {
       return res.status(400).json({ error: "Patient name and amount are required" });
     }
 
-    const { data, error } = await create_invoice(invoiceData);
+    const { data, error } = await create_invoice(invoiceData, hospitalId, context.receptionistId);
     
     if (error) {
       return res.status(400).json({ error });
@@ -320,7 +407,13 @@ const createInvoice = async (req, res) => {
 
 const getAllInvoices = async (req, res) => {
   try {
-    const { data, error } = await get_all_invoices();
+    const context = extractHospitalArgs(req);
+    const { hospitalId, error: contextError } = await resolveHospitalContext(context);
+    if (contextError) {
+      return res.status(400).json({ error: contextError });
+    }
+
+    const { data, error } = await get_all_invoices(hospitalId);
     
     if (error) {
       return res.status(400).json({ error });
@@ -336,12 +429,17 @@ const getAllInvoices = async (req, res) => {
 const updateInvoiceStatus = async (req, res) => {
   try {
     const { invoiceId, status } = req.body;
-    
+    const context = extractHospitalArgs(req);
+    const { hospitalId, error: contextError } = await resolveHospitalContext(context);
+    if (contextError) {
+      return res.status(400).json({ error: contextError });
+    }
+
     if (!invoiceId || !status) {
       return res.status(400).json({ error: "Invoice ID and status are required" });
     }
 
-    const { data, error } = await update_invoice_status(invoiceId, status);
+    const { data, error } = await update_invoice_status(invoiceId, status, hospitalId);
     
     if (error) {
       return res.status(400).json({ error });
@@ -356,7 +454,13 @@ const updateInvoiceStatus = async (req, res) => {
 
 const getBedStatus = async (req, res) => {
   try {
-    const { data, error } = await get_bed_status();
+    const context = extractHospitalArgs(req);
+    const { hospitalId, error: contextError } = await resolveHospitalContext(context);
+    if (contextError) {
+      return res.status(400).json({ error: contextError });
+    }
+
+    const { data, error } = await get_bed_status(hospitalId);
     
     if (error) {
       return res.status(400).json({ error });
@@ -372,12 +476,17 @@ const getBedStatus = async (req, res) => {
 const admitPatientToBed = async (req, res) => {
   try {
     const { patientName, ward } = req.body;
+    const context = extractHospitalArgs(req);
+    const { hospitalId, error: contextError } = await resolveHospitalContext(context);
+    if (contextError) {
+      return res.status(400).json({ error: contextError });
+    }
     
     if (!patientName || !ward) {
       return res.status(400).json({ error: "Patient name and ward are required" });
     }
 
-    const { data, error } = await admit_patient(patientName, ward);
+    const { data, error } = await admit_patient(patientName, ward, hospitalId);
     
     if (error) {
       return res.status(400).json({ error });

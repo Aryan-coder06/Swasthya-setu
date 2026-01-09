@@ -1,0 +1,18 @@
+# Repo-level ignores
+AGENTS.md
+ai.md
+git_group_project_cheatsheet.md
+pass.txt
+PORTAL_BACKEND_OVERVIEW.md
+supabase/
+Frontend/Swasthya-setu/
+
+# Secrets and local configs
+.env
+.env.*
+
+# OS/editor junk
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

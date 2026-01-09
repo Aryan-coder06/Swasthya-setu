@@ -199,7 +199,7 @@ const getDoctorIdsForHospital = async (hospitalId) => {
   return { doctorIds };
 };
 
-const get_all_patients = async (hospitalId) => {
+const get_all_patients = async (hospitalId, searchTerm = "") => {
   if (!hospitalId) {
     return { error: "hospitalId is required" };
   }
@@ -245,20 +245,17 @@ const get_all_patients = async (hospitalId) => {
       unique.push(patient);
     }
   });
-  return { data: unique };
-};
-
-const search_patients = async (searchTerm) => {
-  const { data, error } = await supabase
-    .from("Patient_Profile")
-    .select('*')
-    .or(`firstName.ilike.%${searchTerm}%,lastName.ilike.%${searchTerm}%,phone_no.ilike.%${searchTerm}%,email.ilike.%${searchTerm}%`);
-
-  if (error) {
-    console.error("Search patients error:", error);
-    return { error: error.message };
+  if (typeof searchTerm === "string" && searchTerm.trim()) {
+    const term = searchTerm.trim().toLowerCase();
+    const filtered = unique.filter((patient) => {
+      const fullName = [patient.firstName, patient.lastName].filter(Boolean).join(" ").toLowerCase();
+      const phone = (patient.phone_no ?? "").toString().toLowerCase();
+      const email = (patient.email ?? "").toLowerCase();
+      return fullName.includes(term) || phone.includes(term) || email.includes(term);
+    });
+    return { data: filtered };
   }
-  return { data };
+  return { data: unique };
 };
 
 const extractTicketSuffix = (ticketNumber = "") => {
@@ -267,17 +264,24 @@ const extractTicketSuffix = (ticketNumber = "") => {
   return Number.isNaN(parsed) ? null : parsed;
 };
 
-const create_walkin_ticket = async (patientName) => {
-  const { data: allTickets, error: ticketsError } = await supabase
+const create_walkin_ticket = async (patientName, hospitalId, receptionistId = null) => {
+  if (!hospitalId) {
+    return { error: "hospitalId is required to issue walk-in tickets." };
+  }
+  const today = new Date().toISOString().split('T')[0];
+  const { data: hospitalTickets, error: ticketsError } = await supabase
     .from("walkin_tickets")
-    .select("ticket_number");
+    .select("ticket_number")
+    .eq("hospital_id", hospitalId)
+    .gte('created_at', `${today}T00:00:00`)
+    .lt('created_at', `${today}T23:59:59`);
 
   if (ticketsError) {
     console.error("Fetch walk-in tickets error:", ticketsError);
     return { error: ticketsError.message };
   }
 
-  const issuedNumbers = (allTickets ?? [])
+  const issuedNumbers = (hospitalTickets ?? [])
     .map((row) => extractTicketSuffix(row.ticket_number))
     .filter((val) => typeof val === "number");
 
@@ -292,6 +296,8 @@ const create_walkin_ticket = async (patientName) => {
         ticket_number: ticketNumber,
         patient_name: patientName || "Anonymous Patient",
         status: "waiting",
+        hospital_id: hospitalId,
+        receptionist_id: receptionistId,
         created_at: new Date().toISOString(),
       }])
       .select();
@@ -312,12 +318,16 @@ const create_walkin_ticket = async (patientName) => {
   return { error: "Unable to generate unique ticket number. Please try again." };
 };
 
-const get_today_walkin_tickets = async () => {
+const get_today_walkin_tickets = async (hospitalId) => {
+  if (!hospitalId) {
+    return { error: "hospitalId is required" };
+  }
   const today = new Date().toISOString().split('T')[0];
   
   const { data, error } = await supabase
     .from("walkin_tickets")
     .select('*')
+    .eq('hospital_id', hospitalId)
     .gte('created_at', `${today}T00:00:00`)
     .order('ticket_number', { ascending: true });
 
@@ -328,11 +338,15 @@ const get_today_walkin_tickets = async () => {
   return { data };
 };
 
-const update_walkin_status = async (ticketId, status) => {
+const update_walkin_status = async (ticketId, status, hospitalId) => {
+  if (!hospitalId) {
+    return { error: "hospitalId is required" };
+  }
   const { data, error } = await supabase
     .from("walkin_tickets")
     .update({ status })
     .eq('id', ticketId)
+    .eq('hospital_id', hospitalId)
     .select();
 
   if (error) {
@@ -342,12 +356,16 @@ const update_walkin_status = async (ticketId, status) => {
   return { data: data[0] };
 };
 
-const create_invoice = async (invoiceData) => {
+const create_invoice = async (invoiceData, hospitalId, receptionistId = null) => {
   const { patientName, amount, services } = invoiceData;
+  if (!hospitalId) {
+    return { error: "hospitalId is required to create invoices." };
+  }
   
   const { data: lastInvoice } = await supabase
     .from("invoices")
     .select('invoice_number')
+    .eq('hospital_id', hospitalId)
     .order('created_at', { ascending: false })
     .limit(1);
 
@@ -367,6 +385,8 @@ const create_invoice = async (invoiceData) => {
       amount: amount,
       services: services || [],
       status: 'pending',
+      hospital_id: hospitalId,
+      receptionist_id: receptionistId,
       created_at: new Date().toISOString()
     }])
     .select();
@@ -378,10 +398,14 @@ const create_invoice = async (invoiceData) => {
   return { data: data[0] };
 };
 
-const get_all_invoices = async () => {
+const get_all_invoices = async (hospitalId) => {
+  if (!hospitalId) {
+    return { error: "hospitalId is required" };
+  }
   const { data, error } = await supabase
     .from("invoices")
     .select('*')
+    .eq('hospital_id', hospitalId)
     .order('created_at', { ascending: false });
 
   if (error) {
@@ -391,7 +415,10 @@ const get_all_invoices = async () => {
   return { data };
 };
 
-const update_invoice_status = async (invoiceId, status) => {
+const update_invoice_status = async (invoiceId, status, hospitalId) => {
+  if (!hospitalId) {
+    return { error: "hospitalId is required" };
+  }
   const { data, error } = await supabase
     .from("invoices")
     .update({ 
@@ -399,6 +426,7 @@ const update_invoice_status = async (invoiceId, status) => {
       paid_at: status === 'paid' ? new Date().toISOString() : null
     })
     .eq('id', invoiceId)
+    .eq('hospital_id', hospitalId)
     .select();
 
   if (error) {
@@ -408,10 +436,14 @@ const update_invoice_status = async (invoiceId, status) => {
   return { data: data[0] };
 };
 
-const get_bed_status = async () => {
+const get_bed_status = async (hospitalId) => {
+  if (!hospitalId) {
+    return { error: "hospitalId is required" };
+  }
   const { data, error } = await supabase
     .from("bed_management")
-    .select('*');
+    .select('*')
+    .eq('hospital_id', hospitalId);
 
   if (error) {
     console.error("Get bed status error:", error);
@@ -420,11 +452,15 @@ const get_bed_status = async () => {
   return { data };
 };
 
-const update_bed_occupancy = async (wardId, occupied) => {
+const update_bed_occupancy = async (wardId, occupied, hospitalId) => {
+  if (!hospitalId) {
+    return { error: "hospitalId is required" };
+  }
   const { data, error } = await supabase
     .from("bed_management")
     .update({ occupied })
     .eq('id', wardId)
+    .eq('hospital_id', hospitalId)
     .select();
 
   if (error) {
@@ -434,11 +470,15 @@ const update_bed_occupancy = async (wardId, occupied) => {
   return { data: data[0] };
 };
 
-const admit_patient = async (patientName, wardId) => {
+const admit_patient = async (patientName, wardId, hospitalId) => {
+  if (!hospitalId) {
+    return { error: "hospitalId is required" };
+  }
   const { data: ward } = await supabase
     .from("bed_management")
     .select('occupied, total')
     .eq('id', wardId)
+    .eq('hospital_id', hospitalId)
     .single();
 
   if (!ward || ward.occupied >= ward.total) {
@@ -449,6 +489,7 @@ const admit_patient = async (patientName, wardId) => {
     .from("bed_management")
     .update({ occupied: ward.occupied + 1 })
     .eq('id', wardId)
+    .eq('hospital_id', hospitalId)
     .select();
 
   if (error) {
@@ -461,6 +502,7 @@ const admit_patient = async (patientName, wardId) => {
     .insert([{
       patient_name: patientName,
       ward_id: wardId,
+      hospital_id: hospitalId,
       admission_date: new Date().toISOString()
     }]);
 
@@ -468,74 +510,93 @@ const admit_patient = async (patientName, wardId) => {
 };
 
 
-const get_dashboard_stats = async () => {
-	const today = new Date().toISOString().split('T')[0];
-	
-	const { count: appointmentCount, error: apptError } = await supabase
-		.from("appointments")
-		.select('*', { count: 'exact', head: true }) 
-		.eq('appointment_date', today);
+const get_dashboard_stats = async (hospitalId) => {
+  if (!hospitalId) {
+    return { error: "hospitalId is required" };
+  }
 
-	if (apptError) {
-		console.error("Get appointments count error:", apptError);
-		return { error: apptError.message };
-	}
+  const today = new Date().toISOString().split('T')[0];
+  const { doctorIds, error: doctorScopeError } = await getDoctorIdsForHospital(hospitalId);
+  if (doctorScopeError) {
+    return { error: doctorScopeError };
+  }
 
-	const { count: walkinCount, error: walkinError } = await supabase
-		.from("walkin_tickets")
-		.select('*', { count: 'exact', head: true })
-		.gte('created_at', `${today}T00:00:00`);
-	
-	if (walkinError) {
-		console.error("Get walk-in count error:", walkinError);
-		return { error: walkinError.message };
-	}
+  let appointmentCount = 0;
+  if (doctorIds.length) {
+    const { count, error: apptError } = await supabase
+      .from("appointments")
+      .select("id", { count: 'exact', head: true })
+      .in("doctor_id", doctorIds)
+      .eq("appointment_date", today);
 
-	const { data: todayPayments, error: paymentsError } = await supabase
-		.from("invoices")
-		.select('amount')
-		.eq('status', 'paid')
-		.gte('paid_at', `${today}T00:00:00`);
+    if (apptError) {
+      console.error("Get appointments count error:", apptError);
+      return { error: apptError.message };
+    }
+    appointmentCount = count || 0;
+  }
 
-	if (paymentsError) {
-		console.error("Get today's payments error:", paymentsError);
-		return { error: paymentsError.message };
-	}
+  const { count: walkinCount, error: walkinError } = await supabase
+    .from("walkin_tickets")
+    .select("id", { count: 'exact', head: true })
+    .eq("hospital_id", hospitalId)
+    .gte('created_at', `${today}T00:00:00`);
+  
+  if (walkinError) {
+    console.error("Get walk-in count error:", walkinError);
+    return { error: walkinError.message };
+  }
 
-	const totalPayments = todayPayments?.reduce((sum, inv) => sum + inv.amount, 0) || 0;
+  const { data: todayPayments, error: paymentsError } = await supabase
+    .from("invoices")
+    .select('amount')
+    .eq('hospital_id', hospitalId)
+    .eq('status', 'paid')
+    .gte('paid_at', `${today}T00:00:00`);
 
-	const { data: beds, error: bedsError } = await supabase
-		.from("bed_management")
-		.select('total, occupied');
+  if (paymentsError) {
+    console.error("Get today's payments error:", paymentsError);
+    return { error: paymentsError.message };
+  }
 
-	if (bedsError) {
-		console.error("Get bed status error:", bedsError);
-		return { error: bedsError.message };
-	}
+  const totalPayments = todayPayments?.reduce((sum, inv) => sum + inv.amount, 0) || 0;
 
-	const availableBeds = beds?.reduce((sum, ward) => sum + (ward.total - ward.occupied), 0) || 0;
-	
-	const totalBeds = beds?.reduce((sum, ward) => sum + ward.total, 0) || 0;
-	const occupiedBeds = beds?.reduce((sum, ward) => sum + ward.occupied, 0) || 0;
+  const { data: beds, error: bedsError } = await supabase
+    .from("bed_management")
+    .select('total, occupied')
+    .eq('hospital_id', hospitalId);
 
+  if (bedsError) {
+    console.error("Get bed status error:", bedsError);
+    return { error: bedsError.message };
+  }
 
-	const { count: todayAdmissions } = await supabase
-		.from("admissions")
-		.select('*', { count: 'exact', head: true })
-		.gte('admission_date', `${today}T00:00:00`);
+  const availableBeds = beds?.reduce((sum, ward) => sum + (ward.total - ward.occupied), 0) || 0;
+  const totalBeds = beds?.reduce((sum, ward) => sum + ward.total, 0) || 0;
+  const occupiedBeds = beds?.reduce((sum, ward) => sum + ward.occupied, 0) || 0;
 
+  const { count: todayAdmissions, error: admissionsError } = await supabase
+    .from("admissions")
+    .select('id', { count: 'exact', head: true })
+    .eq('hospital_id', hospitalId)
+    .gte('admission_date', `${today}T00:00:00`);
 
-	return {
-		data: {
-			todayAppointments: appointmentCount || 0,
-			todayWalkins: walkinCount || 0,
-			todayPayments: totalPayments,
-			availableBeds: availableBeds,
-			occupiedBeds: occupiedBeds,
-			totalBeds: totalBeds,
-			todayAdmissions: todayAdmissions || 0 
-		}
-	};
+  if (admissionsError) {
+    console.error("Get admissions count error:", admissionsError);
+    return { error: admissionsError.message };
+  }
+
+  return {
+    data: {
+      todayAppointments: appointmentCount,
+      todayWalkins: walkinCount || 0,
+      todayPayments: totalPayments,
+      availableBeds,
+      occupiedBeds,
+      totalBeds,
+      todayAdmissions: todayAdmissions || 0,
+    },
+  };
 };
 
 export {
@@ -544,7 +605,6 @@ export {
   update_appointment_status,
   register_patient,
   get_all_patients,
-  search_patients,
   create_walkin_ticket,
   get_today_walkin_tickets,
   update_walkin_status,

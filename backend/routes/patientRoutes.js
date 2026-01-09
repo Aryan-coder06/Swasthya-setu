@@ -19,9 +19,7 @@ const router = express.Router();
 const upload = multer();
 
 router.post("/add_profile", addPatientProfile);
-
 router.post("/get_profile", getPatientProfile);
-
 router.post("/update_profile", updatePatientProfile);
 
 router.post("/prescriptions/save", upload.single("file"), savePrescriptionReport);

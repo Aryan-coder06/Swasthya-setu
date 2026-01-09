@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { motion } from "framer-motion";
 import { Bed, Plus, Loader2, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -53,6 +53,21 @@ export default function ReceptionistBedPage() {
   const [error, setError] = useState<string | null>(null);
   const [showModal, setShowModal] = useState(false);
   const [formLoading, setFormLoading] = useState(false);
+  const [receptionistId, setReceptionistId] = useState<string | null>(null);
+  const [hospitalId, setHospitalId] = useState<string | null>(null);
+
+  useEffect(() => {
+    const storedUser = typeof window !== "undefined" ? localStorage.getItem("user") : null;
+    if (!storedUser) return;
+    try {
+      const parsed = JSON.parse(storedUser);
+      if (parsed?.id) setReceptionistId(parsed.id);
+      const hospital = parsed?.hospitalId ?? parsed?.hospital_id ?? null;
+      if (hospital) setHospitalId(hospital);
+    } catch (err) {
+      console.error("Failed to parse receptionist user", err);
+    }
+  }, []);
 
   /* ------------------- NORMALIZE WARD DATA ------------------- */
   const normalizeWard = (raw: RawWard): Ward => {
@@ -67,11 +82,19 @@ export default function ReceptionistBedPage() {
   };
 
   /* ------------------- FETCH BED STATUS ------------------- */
-  const fetchBedStatus = async () => {
+  const fetchBedStatus = useCallback(async () => {
+    if (!receptionistId && !hospitalId) return;
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch(`${API_BASE}/receptionist/beds/status`, {
+      const params = new URLSearchParams();
+      if (hospitalId) {
+        params.set("hospitalId", hospitalId);
+      } else if (receptionistId) {
+        params.set("receptionistId", receptionistId);
+      }
+      const query = params.toString() ? `?${params.toString()}` : "";
+      const res = await fetch(`${API_BASE}/receptionist/beds/status${query}`, {
         cache: "no-store",
       });
 
@@ -96,11 +119,11 @@ export default function ReceptionistBedPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [API_BASE, hospitalId, receptionistId, toast]);
 
   useEffect(() => {
     fetchBedStatus();
-  }, []);
+  }, [fetchBedStatus]);
 
 /* ------------------- ADMIT PATIENT ---------------------- */
 const handleNewAdmission = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -128,11 +151,17 @@ const handleNewAdmission = async (e: React.FormEvent<HTMLFormElement>) => {
   const payload = { patientName, ward: wardName }; 
   console.log("Sending payload:", payload);
 
+  if (!receptionistId) {
+    toast({ title: "Missing receptionist session", description: "Sign in again to admit patients.", variant: "destructive" });
+    setFormLoading(false);
+    return;
+  }
+
   try {
     const res = await fetch(`${API_BASE}/receptionist/beds/admit`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
+      body: JSON.stringify({ ...payload, receptionistId }),
     });
 
     const result = await res.json();
