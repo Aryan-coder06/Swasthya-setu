@@ -10,6 +10,12 @@ import {
     createAppointmentRequest,
     listAppointmentRequestsForPatient,
 } from "../models/appointment_requests.js";
+import {
+    listFamilyMembers,
+    createFamilyMember,
+    updateFamilyMember,
+    deleteFamilyMember,
+} from "../models/family_members.js";
 
 const addPatientProfile = async (req, res) => {
     try {
@@ -238,6 +244,64 @@ const createAppointmentRequestHandler = async (req, res) => {
     }
 };
 
+const listFamilyMembersHandler = async (req, res) => {
+    try {
+        const patientId = req.body?.patientId || req.query?.patientId;
+        if (!patientId) {
+            return res.status(400).json({ error: "patientId is required" });
+        }
+        const { data, error } = await listFamilyMembers(patientId);
+        if (error) {
+            return res.status(500).json({ error: error.message || "Failed to load family members." });
+        }
+        return res.status(200).json({ data });
+    } catch (error) {
+        console.error("Error loading family members:", error);
+        return res.status(500).json({ error: "Internal Server Error" });
+    }
+};
+
+const createFamilyMemberHandler = async (req, res) => {
+    try {
+        const { data, error } = await createFamilyMember(req.body ?? {});
+        if (error) {
+            return res.status(400).json({ error: error.message || "Failed to add family member." });
+        }
+        return res.status(201).json({ data });
+    } catch (error) {
+        console.error("Error creating family member:", error);
+        return res.status(500).json({ error: "Internal Server Error" });
+    }
+};
+
+const updateFamilyMemberHandler = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { data, error } = await updateFamilyMember(id, req.body ?? {});
+        if (error) {
+            return res.status(400).json({ error: error.message || "Failed to update family member." });
+        }
+        return res.status(200).json({ data });
+    } catch (error) {
+        console.error("Error updating family member:", error);
+        return res.status(500).json({ error: "Internal Server Error" });
+    }
+};
+
+const deleteFamilyMemberHandler = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { error } = await deleteFamilyMember(id);
+        if (error) {
+            return res.status(400).json({ error: error.message || "Failed to delete family member." });
+        }
+        return res.status(200).json({ message: "Family member removed." });
+    } catch (error) {
+        console.error("Error deleting family member:", error);
+        return res.status(500).json({ error: "Internal Server Error" });
+    }
+};
+
 const listAppointmentRequestsForPatientHandler = async (req, res) => {
     try {
         const patientId = req.body?.patientId || req.query?.patientId;
@@ -269,4 +333,8 @@ export {
     bookPatientAppointmentHandler,
     createAppointmentRequestHandler,
     listAppointmentRequestsForPatientHandler,
+    listFamilyMembersHandler,
+    createFamilyMemberHandler,
+    updateFamilyMemberHandler,
+    deleteFamilyMemberHandler,
 };

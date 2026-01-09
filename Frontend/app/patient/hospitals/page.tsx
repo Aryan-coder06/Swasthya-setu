@@ -171,6 +171,8 @@ export default function HospitalsPage() {
   const [location, setLocation] = useState<{ lat: number; lng: number } | null>(null);
   const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
   const [isLocating, setIsLocating] = useState(false);
+  const [locationStatus, setLocationStatus] = useState<"idle" | "locating" | "active" | "denied" | "error">("idle");
+  const [watchId, setWatchId] = useState<number | null>(null);
   const [selectedHospitalId, setSelectedHospitalId] = useState<string | null>(null);
   const [selectedPreset, setSelectedPreset] = useState<string>("auto");
   const [activeCity, setActiveCity] = useState<string | null>(null);
@@ -195,7 +197,7 @@ export default function HospitalsPage() {
     include24x7,
   });
 
-  const requestLocation = useCallback(() => {
+  const requestLocation = useCallback((live = false) => {
     if (!("geolocation" in navigator)) {
       pushToast({
         title: "Location access unavailable",
@@ -211,33 +213,68 @@ export default function HospitalsPage() {
     }
 
     setIsLocating(true);
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        setLocation({ lat: position.coords.latitude, lng: position.coords.longitude });
-        setUserLocation({ lat: position.coords.latitude, lng: position.coords.longitude });
-        setSelectedPreset("auto");
-        setActiveCity(null);
-        setActiveCityQueries([]);
-        setIsLocating(false);
+    setLocationStatus("locating");
+
+    const handleSuccess = (position: GeolocationPosition) => {
+      const coords = { lat: position.coords.latitude, lng: position.coords.longitude };
+      setLocation(coords);
+      setUserLocation(coords);
+      setSelectedPreset("auto");
+      setActiveCity(null);
+      setActiveCityQueries([]);
+      setIsLocating(false);
+      setLocationStatus(live ? "active" : "idle");
+      if (!live) {
         pushToast({ title: "Location detected", description: "Fetching hospitals near you." });
-      },
-      (geoError) => {
-        console.error("Geolocation error", geoError);
-        setIsLocating(false);
-        setError("We couldn&apos;t access your location. Showing hospitals around New Delhi as a fallback.");
-        setLocation({ lat: 28.6139, lng: 77.2090 });
-        setSelectedPreset("delhi");
-        setActiveCity("New Delhi");
-        setActiveCityQueries(["New Delhi", "Delhi"]);
-        pushToast({
-          title: "Location request denied",
-          description: "Enable location access in your browser settings to see hospitals closest to you.",
-          variant: "destructive",
-        });
-      },
-      { enableHighAccuracy: true, timeout: 8000 }
-    );
+      }
+    };
+
+    const handleError = (geoError: GeolocationPositionError) => {
+      console.error("Geolocation error", geoError);
+      setIsLocating(false);
+      setLocationStatus(geoError.code === geoError.PERMISSION_DENIED ? "denied" : "error");
+      setError("We couldn&apos;t access your location. Showing hospitals around New Delhi as a fallback.");
+      setLocation({ lat: 28.6139, lng: 77.2090 });
+      setSelectedPreset("delhi");
+      setActiveCity("New Delhi");
+      setActiveCityQueries(["New Delhi", "Delhi"]);
+      pushToast({
+        title: "Location request denied",
+        description: "Enable location access in your browser settings to see hospitals closest to you.",
+        variant: "destructive",
+      });
+    };
+
+    if (live) {
+      const id = navigator.geolocation.watchPosition(handleSuccess, handleError, {
+        enableHighAccuracy: true,
+        maximumAge: 5000,
+        timeout: 10000,
+      });
+      setWatchId(id);
+    } else {
+      navigator.geolocation.getCurrentPosition(handleSuccess, handleError, {
+        enableHighAccuracy: true,
+        timeout: 8000,
+      });
+    }
   }, [pushToast]);
+
+  const stopLiveTracking = useCallback(() => {
+    if (watchId !== null) {
+      navigator.geolocation.clearWatch(watchId);
+      setWatchId(null);
+    }
+    setLocationStatus("idle");
+  }, [watchId]);
+
+  useEffect(() => {
+    return () => {
+      if (watchId !== null) {
+        navigator.geolocation.clearWatch(watchId);
+      }
+    };
+  }, [watchId]);
 
   useEffect(() => {
     const storedUser = typeof window !== "undefined" ? localStorage.getItem("user") : null;
@@ -640,12 +677,29 @@ export default function HospitalsPage() {
           <p className="text-gray-600 mt-1">
             Discover nearby hospitals, compare facilities, and book your next visit with confidence.
           </p>
+          {locationStatus === "active" && (
+            <div className="mt-2 inline-flex items-center gap-2 rounded-full bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-700">
+              <span className="h-2 w-2 rounded-full bg-emerald-500" />
+              Live location tracking enabled
+            </div>
+          )}
         </div>
-        <div className="flex gap-2">
-          <Button variant="outline" onClick={requestLocation} disabled={isLocating}>
+        <div className="flex flex-wrap gap-2">
+          <Button variant="outline" onClick={() => requestLocation(false)} disabled={isLocating}>
             {isLocating ? <RefreshCw className="mr-2 h-4 w-4 animate-spin" /> : <Navigation className="mr-2 h-4 w-4" />}
             {isLocating ? "Locating..." : "Use Current Location"}
           </Button>
+          {locationStatus !== "active" ? (
+            <Button variant="secondary" onClick={() => requestLocation(true)} disabled={isLocating}>
+              <LocateFixed className="mr-2 h-4 w-4" />
+              Enable Live Tracking
+            </Button>
+          ) : (
+            <Button variant="secondary" onClick={stopLiveTracking}>
+              <LocateFixed className="mr-2 h-4 w-4" />
+              Stop Live Tracking
+            </Button>
+          )}
         </div>
       </motion.div>
 

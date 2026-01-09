@@ -147,3 +147,22 @@ export type DoctorSummary = {
     hospital_id?: string | null;
     hospital_name?: string | null;
 };
+
+export type FamilyMember = {
+    id: string;
+    patient_id: string;
+    full_name: string;
+    relation?: string | null;
+    age?: number | null;
+    gender?: string | null;
+    blood_group?: string | null;
+    phone?: string | null;
+    email?: string | null;
+    medical_history?: string[] | null;
+    allergies?: string[] | null;
+    emergency_contact?: boolean | null;
+    last_checkup?: string | null;
+    notes?: string | null;
+    created_at?: string;
+    updated_at?: string;
+};

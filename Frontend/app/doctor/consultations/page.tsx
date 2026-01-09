@@ -248,7 +248,7 @@ export default function DoctorConsultationsPage() {
                   name="patientName"
                   id="patientName"
                   value={patientNameInput}
-                  placeholder="e.g., John Doe"
+                  placeholder="e.g., Priya Mittal"
                   onChange={(event) => {
                     setSelectedPatientId(null);
                     setPatientNameInput(event.target.value);

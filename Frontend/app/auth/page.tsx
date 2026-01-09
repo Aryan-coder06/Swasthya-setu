@@ -492,11 +492,11 @@ export default function AuthPage() {
                       <div className="grid grid-cols-2 gap-4">
                         <div>
                           <Label htmlFor="firstName">First Name</Label>
-                          <Input id="firstName" placeholder="John" value={formData.firstName} onChange={handleInputChange} />
+                          <Input id="firstName" placeholder="Rajesh" value={formData.firstName} onChange={handleInputChange} />
                         </div>
                         <div>
                           <Label htmlFor="lastName">Last Name</Label>
-                          <Input id="lastName" placeholder="Doe" value={formData.lastName} onChange={handleInputChange} />
+                          <Input id="lastName" placeholder="Kumar" value={formData.lastName} onChange={handleInputChange} />
                         </div>
                       </div>
                       <div>
@@ -572,7 +572,7 @@ export default function AuthPage() {
 
                 <div>
                   <Label htmlFor="email">Email</Label>
-                  <Input id="email" type="email" placeholder="john@example.com" value={formData.email} onChange={handleInputChange} />
+                  <Input id="email" type="email" placeholder="ample.com" value={formData.email} onChange={handleInputChange} />
                 </div>
 
                 <div>

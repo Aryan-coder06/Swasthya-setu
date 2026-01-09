@@ -2,7 +2,11 @@
 import supabase from "../main_server.js";
 import { add_patient_profile } from "../models/patient.js";
 import { add_doctor_profile, resolveHospitalDetails } from "../models/doctor.js";
-import { add_receptionist_profile } from "../models/receptionist.js";
+import {
+  add_receptionist_profile,
+  get_receptionist_profile_by_id,
+  update_receptionist_profile,
+} from "../models/receptionist.js";
 
 const signupPatient = async (req, res) => {
   try {
@@ -225,50 +229,91 @@ const signupReceptionist = async (req, res) => {
       return res.status(400).json({ error: "hospitalId is required" });
     }
 
+    let authUser = null;
+    let authSession = null;
     const { data, error } = await supabase.auth.signUp({ email, password });
 
     if (error) {
-      console.error("Supabase signup error:", error);
-      return res.status(error.status || 500).json({
-        status: error.status,
-        code: error.code,
-        reason: error.reason || "none",
-        message: "Signup failed.",
+      const code = error.code || error.message;
+      if (code === "user_already_exists" || error.message?.toLowerCase().includes("already registered")) {
+        const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
+          email,
+          password,
+        });
+
+        if (signInError) {
+          return res.status(400).json({
+            error: signInError.message || "User already registered. Try signing in instead.",
+          });
+        }
+
+        authUser = signInData.user;
+        authSession = signInData.session;
+      } else {
+        console.error("Supabase signup error:", error);
+        return res.status(error.status || 500).json({
+          status: error.status,
+          code: error.code,
+          reason: error.reason || "none",
+          message: "Signup failed.",
+        });
+      }
+    } else {
+      authUser = data.user;
+      authSession = data.session;
+    }
+
+    if (!authUser) {
+      return res.status(500).json({ error: "Unable to complete signup. Please try again." });
+    }
+
+    const existingProfile = await get_receptionist_profile_by_id(authUser.id);
+    let profileResult = existingProfile;
+
+    if (!existingProfile?.data) {
+      profileResult = await add_receptionist_profile(
+        authUser.id,
+        firstName,
+        lastName,
+        email,
+        gender,
+        phone_no,
+        age,
+        hospitalId
+      );
+    } else {
+      profileResult = await update_receptionist_profile(authUser.id, {
+        firstName,
+        lastName,
+        email,
+        gender,
+        phone_no,
+        age,
+        hospitalId,
       });
     }
 
-    const profileResult = await add_receptionist_profile(
-      data.user.id,
-      firstName,
-      lastName,
-      email,
-      gender,
-      phone_no,
-      age,
-      hospitalId
-    );
-
     if (profileResult.error) {
-      console.error("Add receptionist profile error:", profileResult.error);
+      console.error("Add/update receptionist profile error:", profileResult.error);
       return res
         .status(500)
         .json({ message: "Profile creation failed after successful signup." });
     }
 
     return res.status(201).json({
-      message: "Receptionist Signup Successful",
+      message: existingProfile?.data ? "Receptionist profile linked successfully." : "Receptionist Signup Successful",
       user: {
-        id: data.user.id,
-        email: data.user.email,
+        id: authUser.id,
+        email: authUser.email,
         role: "receptionist",
         hospitalId: profileResult?.data?.hospital_id || hospitalId,
         hospitalName: profileResult?.data?.hospital_name || null,
       },
-      session: data.session
+      session: authSession
         ? {
-          access_token: data.session.access_token,
-          expires_in: data.session.expires_in,
-          refresh_token: data.session.refresh_token,
+          access_token: authSession.access_token,
+          expires_in: authSession.expires_in,
+          refresh_token: authSession.refresh_token,
         }
         : null,
     });

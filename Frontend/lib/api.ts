@@ -11,6 +11,7 @@ import type {
   InvoiceRecord,
   AppointmentRecord,
   DoctorSummary,
+  FamilyMember,
 } from "./types";
 import { aiRoute, apiRoute } from "@/config/env";
 
@@ -176,6 +177,81 @@ export async function respondToAppointmentRequestApi(options: {
     throw new Error(json?.error || "Failed to update appointment request.");
   }
   return json;
+}
+
+export async function getFamilyMembers(patientId: string): Promise<FamilyMember[]> {
+  const url = new URL(apiRoute("/patient/family"));
+  url.searchParams.set("patientId", patientId);
+  const res = await fetch(url.toString());
+  const json: ApiJson<FamilyMember[]> = await res.json();
+  if (!res.ok) {
+    throw new Error(json.error || "Failed to load family members.");
+  }
+  return json.data || [];
+}
+
+export async function createFamilyMemberApi(payload: {
+  patientId: string;
+  fullName: string;
+  relation?: string | null;
+  age?: number | null;
+  gender?: string | null;
+  bloodGroup?: string | null;
+  phone?: string | null;
+  email?: string | null;
+  medicalHistory?: string[] | string | null;
+  allergies?: string[] | string | null;
+  emergencyContact?: boolean;
+  lastCheckup?: string | null;
+  notes?: string | null;
+}): Promise<FamilyMember> {
+  const res = await fetch(apiRoute("/patient/family"), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  const json: ApiJson<FamilyMember> = await res.json();
+  if (!res.ok || !json.data) {
+    throw new Error(json.error || "Failed to create family member.");
+  }
+  return json.data;
+}
+
+export async function updateFamilyMemberApi(
+  id: string,
+  payload: Partial<{
+    fullName: string;
+    relation: string | null;
+    age: number | null;
+    gender: string | null;
+    bloodGroup: string | null;
+    phone: string | null;
+    email: string | null;
+    medicalHistory: string[] | string | null;
+    allergies: string[] | string | null;
+    emergencyContact: boolean;
+    lastCheckup: string | null;
+    notes: string | null;
+  }>
+): Promise<FamilyMember> {
+  const res = await fetch(apiRoute(`/patient/family/${id}`), {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  const json: ApiJson<FamilyMember> = await res.json();
+  if (!res.ok || !json.data) {
+    throw new Error(json.error || "Failed to update family member.");
+  }
+  return json.data;
+}
+
+export async function deleteFamilyMemberApi(id: string): Promise<void> {
+  const res = await fetch(apiRoute(`/patient/family/${id}`), { method: "DELETE" });
+  const json = await res.json();
+  if (!res.ok) {
+    throw new Error(json?.error || "Failed to delete family member.");
+  }
 }
 
 export async function fetchNotifications(params: {
