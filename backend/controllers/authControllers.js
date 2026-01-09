@@ -8,6 +8,11 @@ import {
   update_receptionist_profile,
 } from "../models/receptionist.js";
 
+const resolveFrontendOrigin = () => {
+  const raw = process.env.FRONTEND_URL || process.env.FRONTEND_ORIGIN || "http://localhost:3000";
+  return raw.replace(/\/+$/, "");
+};
+
 const signupPatient = async (req, res) => {
   try {
     const {
@@ -22,7 +27,12 @@ const signupPatient = async (req, res) => {
     if (!email || !password)
       return res.status(400).json({ error: "email and password are required" });
 
-    const { data, error } = await supabase.auth.signUp({ email, password });
+    const redirectTo = resolveFrontendOrigin();
+    const { data, error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: { emailRedirectTo: redirectTo },
+    });
     if (error) {
       console.log(error);
       return res.json({
@@ -87,7 +97,12 @@ const signupDoctor = async (req, res) => {
 
     let authUser = null;
     let authSession = null;
-    const { data, error } = await supabase.auth.signUp({ email, password });
+    const redirectTo = resolveFrontendOrigin();
+    const { data, error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: { emailRedirectTo: redirectTo },
+    });
 
     if (error) {
       const code = error.code || error.message;
@@ -231,7 +246,12 @@ const signupReceptionist = async (req, res) => {
 
     let authUser = null;
     let authSession = null;
-    const { data, error } = await supabase.auth.signUp({ email, password });
+    const redirectTo = resolveFrontendOrigin();
+    const { data, error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: { emailRedirectTo: redirectTo },
+    });
 
     if (error) {
       const code = error.code || error.message;
@@ -469,7 +489,7 @@ const forgotPassword = async (req, res) => {
         .json({ error: "Email not found in any user role" });
     }
 
-    const redirectUrl = "http://localhost:3000/auth/reset-password";
+    const redirectUrl = `${resolveFrontendOrigin()}/auth/reset-password`;
 
     const { error } = await supabase.auth.resetPasswordForEmail(email, {
       redirectTo: redirectUrl,

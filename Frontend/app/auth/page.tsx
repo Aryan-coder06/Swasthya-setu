@@ -249,6 +249,15 @@ export default function AuthPage() {
         setTimeout(() => {
           router.push(roles.find((r) => r.id === selectedRole)!.route);
         }, 2000);
+      } else if (response.data.user && !response.data.session) {
+        toast({
+          title: "Verify your email",
+          description: "We sent a confirmation link to your inbox. Please verify to continue.",
+        });
+        setMessage({
+          type: "success",
+          text: "Check your email and confirm your account before signing in.",
+        });
       } else {
         toast({
           title: "Registration failed",
