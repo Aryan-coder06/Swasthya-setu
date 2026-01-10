@@ -31,7 +31,7 @@ export default function RootLayout({
       >
         <ClickSpark />
         {/* <LoadingScreen> */}
-          <div className="min-h-screen">
+          <div className="min-h-screen pb-24 md:pb-0">
             <div className="pointer-events-none fixed inset-0 z-[-1] bg-[radial-gradient(circle_at_20%_20%,_rgba(88,237,200,0.25),_transparent_55%),radial-gradient(circle_at_80%_0%,_rgba(132,204,255,0.25),_transparent_60%)]" />
             {children}
             <ReactToastProvider />

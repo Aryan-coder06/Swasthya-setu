@@ -127,15 +127,15 @@ export default function PatientDashboardPage() {
         <motion.div variants={itemVariants}>
           <Card className="bg-gradient-to-r from-blue-500 to-green-500 text-white">
             <CardContent className="p-6">
-              <div className="flex items-center justify-between">
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                 <div>
                   {/* Welcome message is now dynamic */}
-                  <h2 className="text-2xl font-bold mb-2">Good Morning, {profileData?.firstName || 'Patient'}!</h2>
+                  <h2 className="text-2xl font-bold mb-2">Good Morning, {profileData?.firstName || "Patient"}!</h2>
                   <p className="text-blue-100">Your health is our priority. How are you feeling today?</p>
                 </div>
-                <div className="text-right">
+                <div className="flex items-center gap-3 rounded-2xl bg-white/15 px-4 py-2 text-right sm:flex-col sm:items-end">
                   <div className="text-3xl font-bold">96</div>
-                  <div className="text-sm text-blue-100">Health Score</div>
+                  <div className="text-xs uppercase tracking-wide text-blue-100">Health Score</div>
                 </div>
               </div>
             </CardContent>
@@ -151,46 +151,44 @@ export default function PatientDashboardPage() {
       </CardTitle>
     </CardHeader>
     <CardContent>
-      <div className="grid grid-cols-5 gap-4">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
         <Button
-          className="h-20 flex-col space-y-2"
+          className="h-20 flex-col gap-2 text-xs sm:text-sm"
           onClick={() => handleQuickAction("book-appointment")}
         >
-          <Calendar className="w-6 h-6" />
-          <span>Book Appointment</span>
+          <Calendar className="h-5 w-5" />
+          <span>Book</span>
         </Button>
         <Button
           variant="outline"
-          className="h-20 flex-col space-y-2"
+          className="h-20 flex-col gap-2 text-xs sm:text-sm"
           onClick={() => handleQuickAction("upload-report")}
         >
-          <FileText className="w-6 h-6" />
-          <span>Upload Report</span>
+          <FileText className="h-5 w-5" />
+          <span>Upload</span>
         </Button>
         <Button
           variant="outline"
-          className="h-20 flex-col space-y-2"
+          className="h-20 flex-col gap-2 text-xs sm:text-sm"
           onClick={() => handleQuickAction("ai-consultation")}
         >
-          <Stethoscope className="w-6 h-6" />
-          <span>AI Consultation</span>
+          <Stethoscope className="h-5 w-5" />
+          <span>AI Consult</span>
         </Button>
-        {/* Analyze Prescription button with icon */}
-       <Button
-  variant="outline"
-  className="h-20 flex-col space-y-2"
-  onClick={() => router.push("/patient/analyze-prescription")}
->
-  <FileText className="w-6 h-6" />
-  <span className="whitespace-nowrap">Analyze Prescription</span>
-</Button>
-
+        <Button
+          variant="outline"
+          className="h-20 flex-col gap-2 text-xs sm:text-sm"
+          onClick={() => router.push("/patient/analyze-prescription")}
+        >
+          <FileText className="h-5 w-5" />
+          <span>Analyze</span>
+        </Button>
         <Button
           variant="destructive"
-          className="h-20 flex-col space-y-2"
+          className="h-20 flex-col gap-2 text-xs sm:text-sm"
           onClick={() => handleQuickAction("emergency")}
         >
-          <AlertCircle className="w-6 h-6" />
+          <AlertCircle className="h-5 w-5" />
           <span>Emergency</span>
         </Button>
       </div>

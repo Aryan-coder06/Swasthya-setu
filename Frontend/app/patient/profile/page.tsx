@@ -8,10 +8,12 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useProfile } from "@/app/context/ProfileContext"; // Import the custom hook
+import { useRouter } from "next/navigation";
 
 export default function ProfilePage() {
   // Get state and functions from the global context
   const { profileData, updateProfileData, saveProfile } = useProfile();
+  const router = useRouter();
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { id, value } = e.target;
@@ -36,11 +38,26 @@ export default function ProfilePage() {
     visible: { y: 0, opacity: 1, transition: { duration: 0.5 } }
   };
 
+  const handleLogout = () => {
+    if (typeof window !== "undefined") {
+      window.localStorage.removeItem("user");
+      window.localStorage.removeItem("session");
+    }
+    router.push("/auth");
+  };
+
   return (
     <div className="space-y-6">
       <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }}>
-        <h1 className="text-3xl font-bold text-gray-900">My Profile</h1>
-        <p className="text-gray-600 mt-1">View and manage your personal information.</p>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h1 className="text-3xl font-bold text-gray-900">My Profile</h1>
+            <p className="text-gray-600 mt-1">View and manage your personal information.</p>
+          </div>
+          <Button variant="outline" onClick={handleLogout} className="w-full sm:w-auto">
+            Log out
+          </Button>
+        </div>
       </motion.div>
 
       <motion.div variants={itemVariants} initial="hidden" animate="visible">
@@ -113,4 +130,3 @@ export default function ProfilePage() {
     </div>
   );
 }
-

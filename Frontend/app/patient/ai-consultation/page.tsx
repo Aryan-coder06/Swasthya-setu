@@ -747,8 +747,8 @@ export default function AIConsultationPage() {
           </Card>
         </motion.div>
 
-        <Card className="flex h-[720px] flex-col overflow-hidden">
-          <CardHeader className="border-b bg-slate-50">
+        <Card className="flex min-h-[520px] h-[70vh] flex-col overflow-hidden sm:h-[640px] lg:h-[720px]">
+          <CardHeader className="border-b bg-slate-50 p-4 sm:p-6">
             <CardTitle className="flex items-center gap-2">
               <Stethoscope className="w-5 h-5 text-emerald-600" />
               AI Health Assistant
@@ -758,7 +758,7 @@ export default function AIConsultationPage() {
             </CardDescription>
           </CardHeader>
 
-          <CardContent className="flex-1 space-y-4 overflow-y-auto bg-gradient-to-b from-white via-slate-50/60 to-white p-6">
+          <CardContent className="flex-1 space-y-4 overflow-y-auto bg-gradient-to-b from-white via-slate-50/60 to-white p-4 sm:p-6">
             <AnimatePresence>
               {messages.map((message) => {
                 const isUser = message.type === "user";
@@ -918,7 +918,7 @@ export default function AIConsultationPage() {
               <p className="mb-2 text-sm text-red-600">{attachmentError}</p>
             )}
 
-            <div className="flex items-end gap-3">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
               <div className="flex flex-1 items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 shadow-sm focus-within:border-emerald-400 focus-within:ring">
                 <Button
                   variant="ghost"
@@ -948,20 +948,22 @@ export default function AIConsultationPage() {
                   onChange={handleAttachmentPick}
                 />
               </div>
-              <Button
-                onClick={handleSendMessage}
-                disabled={isTyping}
-                className="rounded-full bg-emerald-600 hover:bg-emerald-700"
-              >
-                {isTyping ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <Send className="h-4 w-4" />
-                )}
-              </Button>
-              <Button variant="outline" onClick={resetComposer}>
-                Reset
-              </Button>
+              <div className="flex items-center gap-2 sm:gap-3">
+                <Button
+                  onClick={handleSendMessage}
+                  disabled={isTyping}
+                  className="rounded-full bg-emerald-600 hover:bg-emerald-700"
+                >
+                  {isTyping ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Send className="h-4 w-4" />
+                  )}
+                </Button>
+                <Button variant="outline" onClick={resetComposer} className="whitespace-nowrap">
+                  Reset
+                </Button>
+              </div>
             </div>
             {isTyping && (
               <div className="mt-2 flex items-center gap-2 text-xs text-muted-foreground">

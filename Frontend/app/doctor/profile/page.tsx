@@ -9,9 +9,11 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useDoctorProfile } from "../../context/DoctorProfileContext";
+import { useRouter } from "next/navigation";
 
 export default function DoctorProfilePage() {
   const { profileData, updateProfile } = useDoctorProfile();
+  const router = useRouter();
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
@@ -29,6 +31,14 @@ export default function DoctorProfilePage() {
     visible: { y: 0, opacity: 1, transition: { duration: 0.5 } }
   };
 
+  const handleLogout = () => {
+    if (typeof window !== "undefined") {
+      window.localStorage.removeItem("user");
+      window.localStorage.removeItem("session");
+    }
+    router.push("/auth");
+  };
+
   return (
     <motion.div
       initial="hidden"
@@ -36,7 +46,12 @@ export default function DoctorProfilePage() {
       variants={{ visible: { transition: { staggerChildren: 0.1 } } }}
       className="space-y-6"
     >
-      <motion.h1 variants={itemVariants} className="text-3xl font-bold text-gray-900">Doctor Profile</motion.h1>
+      <motion.div variants={itemVariants} className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <h1 className="text-3xl font-bold text-gray-900">Doctor Profile</h1>
+        <Button variant="outline" onClick={handleLogout} className="w-full sm:w-auto">
+          Log out
+        </Button>
+      </motion.div>
 
       <motion.div variants={itemVariants}>
         <Card>
@@ -96,5 +111,4 @@ export default function DoctorProfilePage() {
     </motion.div>
   );
 }
-
 

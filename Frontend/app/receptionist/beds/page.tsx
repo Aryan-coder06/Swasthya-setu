@@ -214,7 +214,7 @@ const handleNewAdmission = async (e: React.FormEvent<HTMLFormElement>) => {
                   <Input
                     id="patientName"
                     name="patientName"
-                    placeholder="John Doe"
+                    placeholder="Full name"
                     required
                   />
                 </div>

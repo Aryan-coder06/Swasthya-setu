@@ -364,7 +364,7 @@ export default function ReceptionistBillingPage() {
                     id="patientName"
                     value={patientName}
                     onChange={(e) => setPatientName(e.target.value)}
-                    placeholder="John Doe"
+                    placeholder="Full name"
                     required
                   />
                 </div>

@@ -17,6 +17,7 @@ create table if not exists public.family_members (
   updated_at timestamptz not null default now()
 );
 
+
 create index if not exists idx_family_members_patient on public.family_members (patient_id);
 
 create or replace function public.touch_family_members_updated_at()

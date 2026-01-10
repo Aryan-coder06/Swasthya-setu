@@ -12,6 +12,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
 import type { ReceptionistProfile } from "@/lib/types";
 import { getReceptionistProfileApi, updateReceptionistProfileApi } from "@/lib/api";
+import { useRouter } from "next/navigation";
 
 type FormState = {
   firstName: string;
@@ -40,6 +41,7 @@ const createFormState = (profile: ReceptionistProfile | null): FormState => ({
 
 export default function ReceptionistProfilePage() {
   const { toast } = useToast();
+  const router = useRouter();
 
   const [profile, setProfile] = useState<ReceptionistProfile | null>(null);
   const [formState, setFormState] = useState<FormState>(createFormState(null));
@@ -146,6 +148,14 @@ export default function ReceptionistProfilePage() {
     }
   };
 
+  const handleLogout = () => {
+    if (typeof window !== "undefined") {
+      window.localStorage.removeItem("user");
+      window.localStorage.removeItem("session");
+    }
+    router.push("/auth");
+  };
+
   if (isLoading) {
     return (
       <div className="space-y-6">
@@ -180,9 +190,14 @@ export default function ReceptionistProfilePage() {
       transition={{ duration: 0.4 }}
       className="space-y-6"
     >
-      <div>
-        <h1 className="text-3xl font-semibold text-slate-900">My Profile</h1>
-        <p className="text-slate-500">Manage your receptionist information and contact details.</p>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h1 className="text-3xl font-semibold text-slate-900">My Profile</h1>
+          <p className="text-slate-500">Manage your receptionist information and contact details.</p>
+        </div>
+        <Button variant="outline" onClick={handleLogout} className="w-full sm:w-auto">
+          Log out
+        </Button>
       </div>
 
       <Card>

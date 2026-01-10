@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -15,6 +15,7 @@ import {
   Stethoscope,
   Bed,
   Receipt,
+  FileText,
 } from "lucide-react";
 
 type DockItem = {
@@ -28,6 +29,9 @@ const patientItems: DockItem[] = [
   { label: "Visits", href: "/patient/appointments", icon: Calendar },
   { label: "Hospitals", href: "/patient/hospitals", icon: Hospital },
   { label: "Family", href: "/patient/family", icon: Users },
+  { label: "AI", href: "/patient/ai-consultation", icon: Activity },
+  { label: "Rx", href: "/patient/prescriptions", icon: ClipboardList },
+  { label: "Records", href: "/patient/records", icon: FileText },
   { label: "Profile", href: "/patient/profile", icon: User },
 ];
 
@@ -64,26 +68,49 @@ const resolveItems = (pathname: string): DockItem[] => {
 export default function MobileDock() {
   const pathname = usePathname();
   const items = useMemo(() => resolveItems(pathname), [pathname]);
+  const [isAuthed, setIsAuthed] = useState(false);
+  const [isReady, setIsReady] = useState(false);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      const session = window.localStorage.getItem("session");
+      const user = window.localStorage.getItem("user");
+      setIsAuthed(!!session && !!user);
+    } catch {
+      setIsAuthed(false);
+    } finally {
+      setIsReady(true);
+    }
+  }, []);
+
+  if (!isReady) return null;
+  if (!isAuthed) return null;
+  if (pathname === "/" || pathname.startsWith("/auth")) return null;
+  if (!pathname.startsWith("/patient") && !pathname.startsWith("/doctor") && !pathname.startsWith("/receptionist")) {
+    return null;
+  }
 
   return (
     <motion.div
-      className="fixed bottom-4 left-1/2 z-40 w-[92vw] max-w-md -translate-x-1/2 rounded-3xl border border-white/10 bg-slate-900/90 px-4 py-3 shadow-[0_20px_60px_-20px_rgba(0,0,0,0.6)] backdrop-blur md:hidden"
+      className="fixed bottom-0 left-0 right-0 z-40 w-full rounded-t-3xl border border-white/10 bg-slate-900/90 px-1 py-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] shadow-[0_20px_60px_-20px_rgba(0,0,0,0.6)] backdrop-blur md:hidden"
       initial={{ y: 60, opacity: 0 }}
       animate={{ y: 0, opacity: 1 }}
       transition={{ type: "spring", stiffness: 140, damping: 18 }}
     >
       <motion.div
-        className="flex items-center gap-2 overflow-hidden"
+        className="flex items-center gap-2 overflow-x-auto hide-scrollbar"
         drag="x"
-        dragConstraints={{ left: -80, right: 80 }}
+        dragConstraints={{ left: -120, right: 120 }}
         dragElastic={0.2}
         whileTap={{ cursor: "grabbing" }}
+        style={{ scrollbarWidth: "none" }}
       >
         {items.map((item) => {
           const Icon = item.icon;
           const active = pathname === item.href;
           return (
-            <Link key={item.href} href={item.href} className="relative flex-1">
+            <Link key={item.href} href={item.href} className="relative min-w-[72px]">
               <motion.div
                 className="flex flex-col items-center gap-1 rounded-2xl px-2 py-2 text-xs font-medium text-slate-300"
                 whileTap={{ scale: 0.94 }}

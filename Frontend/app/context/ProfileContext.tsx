@@ -29,15 +29,15 @@ const ProfileContext = createContext<ProfileContextType | undefined>(undefined);
 
 const initialProfileData: ProfileData = {
   id: null,
-  firstName: "John",
-  lastName: "Doe",
-  email: "john.doe@example.com",
-  phone: "+91 98765 43210",
-  dob: "1990-05-15",
-  address: "123 Health St.",
-  city: "Wellness City",
-  state: "State of Calm",
-  pincode: "123456",
+  firstName: "",
+  lastName: "",
+  email: "",
+  phone: "",
+  dob: "",
+  address: "",
+  city: "",
+  state: "",
+  pincode: "",
   profilePic: "",
 };
 
