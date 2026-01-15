@@ -55,7 +55,7 @@ export default function PrescriptionAnalyzerPage() {
 
     setTimeout(() => {
       const mockResult: AnalysisResult = {
-        doctor: "Dr. Sarah Wilson, MD",
+        doctor: "Dr. Kavya Nair, MD",
         date: "2025-10-13",
         medications: [
           { name: "Amoxicillin", dosage: "500mg", frequency: "Twice a day", duration: "7 days", instructions: "After meals" },

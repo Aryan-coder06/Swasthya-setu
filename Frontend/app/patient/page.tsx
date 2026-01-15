@@ -36,15 +36,15 @@ export default function PatientDashboardPage() {
 
   // Mock Data for the dashboard widgets
   const upcomingAppointments = [
-    { id: 1, doctor: "Dr. Sarah Wilson", specialty: "Cardiologist", date: "Tomorrow", time: "2:00 PM", status: "confirmed" },
-    { id: 2, doctor: "Dr. Michael Chen", specialty: "General Medicine", date: "Oct 28", time: "10:30 AM", status: "pending" },
+    { id: 1, doctor: "Dr. Siddharth Jain", specialty: "Cardiologist", date: "Tomorrow", time: "2:15 PM", status: "confirmed" },
+    { id: 2, doctor: "Dr. Priya Nair", specialty: "General Medicine", date: "Oct 28", time: "10:15 AM", status: "pending" },
   ];
   const healthMetrics = [
-    { label: "Blood Pressure", value: "120/80", status: "normal", color: "text-green-600" },
-    { label: "Heart Rate", value: "72 BPM", status: "normal", color: "text-green-600" },
+    { label: "Blood Pressure", value: "119/78", status: "normal", color: "text-green-600" },
+    { label: "Heart Rate", value: "74 BPM", status: "normal", color: "text-green-600" },
   ];
   const recentActivities = [
-    { type: "appointment", message: "Appointment confirmed with Dr. Sarah Wilson", time: "2 hours ago" },
+    { type: "appointment", message: "Appointment confirmed with Dr. Siddharth Jain", time: "2 hours ago" },
     { type: "report", message: "Lab results uploaded - Blood Test", time: "1 day ago" },
   ];
 
@@ -134,7 +134,7 @@ export default function PatientDashboardPage() {
                   <p className="text-blue-100">Your health is our priority. How are you feeling today?</p>
                 </div>
                 <div className="flex items-center gap-3 rounded-2xl bg-white/15 px-4 py-2 text-right sm:flex-col sm:items-end">
-                  <div className="text-3xl font-bold">96</div>
+                  <div className="text-3xl font-bold">75</div>
                   <div className="text-xs uppercase tracking-wide text-blue-100">Health Score</div>
                 </div>
               </div>
@@ -228,7 +228,7 @@ export default function PatientDashboardPage() {
       </motion.div>
 
       {/* Modals */}
-      <Dialog open={showBookingModal} onOpenChange={setShowBookingModal}><DialogContent className="max-w-2xl"><DialogHeader><DialogTitle>Book New Appointment</DialogTitle><DialogDescription>Schedule an appointment with your preferred doctor</DialogDescription></DialogHeader><div className="space-y-6"><div className="grid grid-cols-2 gap-4"><div><Label htmlFor="specialty">Specialty</Label><Select><SelectTrigger><SelectValue placeholder="Select specialty" /></SelectTrigger><SelectContent><SelectItem value="cardiology">Cardiology</SelectItem></SelectContent></Select></div><div><Label htmlFor="doctor">Doctor</Label><Select><SelectTrigger><SelectValue placeholder="Select doctor" /></SelectTrigger><SelectContent><SelectItem value="dr-wilson">Dr. Sarah Wilson</SelectItem></SelectContent></Select></div></div><div className="grid grid-cols-2 gap-4"><div><Label htmlFor="date">Preferred Date</Label><Input type="date" /></div><div><Label htmlFor="time">Time Slot</Label><Select><SelectTrigger><SelectValue placeholder="Select time" /></SelectTrigger><SelectContent><SelectItem value="9am">9:00 AM</SelectItem></SelectContent></Select></div></div><div><Label htmlFor="reason">Reason for Visit</Label><Textarea placeholder="Brief description of your concern" /></div><div className="flex justify-end space-x-3"><Button variant="outline" onClick={() => setShowBookingModal(false)}>Cancel</Button><Button onClick={handleBookAppointment} className="healthcare-gradient">Book Appointment</Button></div></div></DialogContent></Dialog>
+      <Dialog open={showBookingModal} onOpenChange={setShowBookingModal}><DialogContent className="max-w-2xl"><DialogHeader><DialogTitle>Book New Appointment</DialogTitle><DialogDescription>Schedule an appointment with your preferred doctor</DialogDescription></DialogHeader><div className="space-y-6"><div className="grid grid-cols-2 gap-4"><div><Label htmlFor="specialty">Specialty</Label><Select><SelectTrigger><SelectValue placeholder="Select specialty" /></SelectTrigger><SelectContent><SelectItem value="cardiology">Cardiology</SelectItem></SelectContent></Select></div><div><Label htmlFor="doctor">Doctor</Label><Select><SelectTrigger><SelectValue placeholder="Select doctor" /></SelectTrigger><SelectContent><SelectItem value="dr-iyer">Dr. Kavya Iyer</SelectItem></SelectContent></Select></div></div><div className="grid grid-cols-2 gap-4"><div><Label htmlFor="date">Preferred Date</Label><Input type="date" /></div><div><Label htmlFor="time">Time Slot</Label><Select><SelectTrigger><SelectValue placeholder="Select time" /></SelectTrigger><SelectContent><SelectItem value="9am">9:00 AM</SelectItem></SelectContent></Select></div></div><div><Label htmlFor="reason">Reason for Visit</Label><Textarea placeholder="Brief description of your concern" /></div><div className="flex justify-end space-x-3"><Button variant="outline" onClick={() => setShowBookingModal(false)}>Cancel</Button><Button onClick={handleBookAppointment} className="healthcare-gradient">Book Appointment</Button></div></div></DialogContent></Dialog>
       
       <Dialog open={showUploadModal} onOpenChange={setShowUploadModal}><DialogContent className="max-w-2xl"><DialogHeader><DialogTitle>Upload Medical Report</DialogTitle><DialogDescription>Upload your medical documents, reports, or prescriptions</DialogDescription></DialogHeader><div className="space-y-6"><div className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center"><FileText className="w-12 h-12 text-gray-400 mx-auto mb-4" /><p className="text-lg font-medium text-gray-900 mb-2">{selectedFile ? selectedFile.name : "Drop files here or click to browse"}</p><p className="text-gray-600 mb-4">Supports PDF, JPG, PNG files up to 10MB</p><Input type="file" onChange={handleFileChange} className="hidden" id="file-upload" /><Label htmlFor="file-upload" className="cursor-pointer inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 px-4 py-2">Choose Files</Label></div><div className="flex justify-end space-x-3"><Button variant="outline" onClick={() => setShowUploadModal(false)}>Cancel</Button><Button onClick={handleUploadReport} className="healthcare-gradient" disabled={!selectedFile}>Upload Report</Button></div></div></DialogContent></Dialog>
 

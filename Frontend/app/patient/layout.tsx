@@ -2,6 +2,8 @@
 
 import { useState, useEffect, ReactNode, useRef, useMemo } from "react";
 import { usePathname, useRouter } from "next/navigation";
+import Image from "next/image";
+import { Aladin, Viaoda_Libre } from "next/font/google";
 import Link from "next/link";
 import { motion } from "framer-motion";
 import {
@@ -16,6 +18,9 @@ import { ProfileProvider, useProfile } from "../context/ProfileContext";
 import { useToast } from "@/hooks/use-toast";
 import { fetchNotifications, markAllNotificationsReadApi } from "@/lib/api";
 import type { NotificationRecord } from "@/lib/types";
+
+const aladin = Aladin({ subsets: ["latin"], weight: "400" });
+const viaodaLibre = Viaoda_Libre({ subsets: ["latin"], weight: "400" });
 
 function PatientLayoutUI({ children }: { children: ReactNode }) {
   const router = useRouter();
@@ -178,10 +183,18 @@ function PatientLayoutUI({ children }: { children: ReactNode }) {
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-4">
             <div className="flex items-center space-x-2">
-              <div className="w-8 h-8 healthcare-gradient rounded-lg flex items-center justify-center"><Heart className="w-5 h-5 text-white" /></div>
-              <span className="text-xl font-bold text-gray-900">SwasthyaSetu</span>
+              <div className="w-10 h-10 rounded-lg flex items-center justify-center">
+                <Image
+                  src="/Images/swasthya-removebg-preview.png"
+                  alt="SwasthyaSetu logo"
+                  width={32}
+                  height={32}
+                  className="h-8 w-8 object-contain"
+                />
+              </div>
+              <span className={`${aladin.className} text-[30px] text-gray-900`}>SwasthyaSetu</span>
             </div>
-            <Badge variant="outline">Patient Portal</Badge>
+            <Badge variant="outline" className={`${viaodaLibre.className} text-[20px]`}>Patient Portal</Badge>
           </div>
           <div className="flex items-center space-x-4">
             <div className="relative" ref={notificationRef}>

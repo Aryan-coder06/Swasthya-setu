@@ -27,20 +27,20 @@ export default function EmergencySOSPage() {
   const [emergencyActive, setEmergencyActive] = useState(false);
   const [ambulanceStatus, setAmbulanceStatus] = useState<"dispatched" | "enroute" | "arrived" | null>(null);
   const [countdown, setCountdown] = useState(0);
-  const [currentLocation, setCurrentLocation] = useState("123 Main Street, Downtown");
+  const [currentLocation, setCurrentLocation] = useState("22 MG Road, Bengaluru");
   const { toast } = useToast();
 
   const emergencyContacts = [
-    { name: "Sarah Johnson", relation: "Spouse", phone: "+91 98765 43210", avatar: "SJ" },
-    { name: "Robert Johnson Sr.", relation: "Father", phone: "+91 98765 43211", avatar: "RJ" },
-    { name: "Mary Johnson", relation: "Mother", phone: "+91 98765 43212", avatar: "MJ" },
-    { name: "Dr. Sarah Wilson", relation: "Family Doctor", phone: "+91 98765 43213", avatar: "SW" }
+    { name: "Ananya Verma", relation: "Spouse", phone: "+91 98765 43210", avatar: "AV" },
+    { name: "Rajesh Verma", relation: "Father", phone: "+91 98765 43211", avatar: "RV" },
+    { name: "Meera Verma", relation: "Mother", phone: "+91 98765 43212", avatar: "MV" },
+    { name: "Dr. Kunal Shah", relation: "Family Doctor", phone: "+91 98765 43213", avatar: "KS" }
   ];
 
   const nearbyHospitals = [
-    { name: "City General Hospital", distance: "2.3 km", eta: "8 mins", beds: "Available" },
-    { name: "Emergency Care Center", distance: "3.1 km", eta: "12 mins", beds: "Available" },
-    { name: "Metro Health Hospital", distance: "4.5 km", eta: "15 mins", beds: "Limited" }
+    { name: "Apollo City Hospital", distance: "2.3 km", eta: "8 mins", beds: "Available" },
+    { name: "Fortis Emergency Center", distance: "3.1 km", eta: "12 mins", beds: "Available" },
+    { name: "Manipal Health Hospital", distance: "4.5 km", eta: "15 mins", beds: "Limited" }
   ];
 
   useEffect(() => {

@@ -41,17 +41,17 @@ const HeroDashboardPreview = () => (
         </div>
         <div className="flex items-center space-x-3">
           <Bell className="w-5 h-5 text-slate-400 hover:text-slate-600 transition" />
-          <div className="w-8 h-8 rounded-full bg-slate-200 flex items-center justify-center font-bold text-cyan-700">JD</div>
+          <div className="w-8 h-8 rounded-full bg-slate-200 flex items-center justify-center font-bold text-cyan-700">AK</div>
         </div>
       </div>
       <div className="p-6 space-y-6 bg-slate-50/50">
         <div className="flex justify-between items-center bg-gradient-to-r from-cyan-500 to-emerald-500 text-white p-4 rounded-xl">
           <div>
-            <h3 className="font-bold text-lg">Good Morning, John!</h3>
+            <h3 className="font-bold text-lg">Good Morning, Aarav!</h3>
             <p className="text-sm opacity-90">How are you feeling today?</p>
           </div>
           <div className="flex flex-col items-center justify-center bg-white/20 rounded-lg p-2 text-center">
-            <span className="font-bold text-2xl">96</span>
+            <span className="font-bold text-2xl">78</span>
             <span className="text-xs font-medium">Health Score</span>
           </div>
         </div>
@@ -74,9 +74,9 @@ const HeroDashboardPreview = () => (
           <h4 className="text-sm font-semibold text-slate-600 mb-2">Upcoming Appointment</h4>
           <div className="bg-white p-3 rounded-lg border border-slate-200/80 flex items-center justify-between shadow-sm">
             <div className="flex items-center space-x-3">
-              <div className="w-9 h-9 rounded-full bg-slate-200 flex items-center justify-center font-semibold text-slate-600 text-sm">SW</div>
+              <div className="w-9 h-9 rounded-full bg-slate-200 flex items-center justify-center font-semibold text-slate-600 text-sm">NK</div>
               <div>
-                <p className="text-sm font-semibold text-slate-800">Dr. Sarah Wilson</p>
+                <p className="text-sm font-semibold text-slate-800">Dr. Neha Kapoor</p>
                 <p className="text-xs text-slate-500">Cardiologist</p>
               </div>
             </div>
@@ -181,8 +181,8 @@ export default function Home() {
   ];
 
   const testimonials = [
-    { name: "Sarah L.", title: "Verified Patient", avatar: "https://images.unsplash.com/photo-1550525811-e5869dd03032?auto=format&fit=facearea&facepad=2&w=256&h=256&q=80", quote: "SwasthyaSetu has been a lifesaver. I can manage my entire family's health records and appointments from one app. It's incredibly intuitive and has saved me so much time and stress." },
-    { name: "Dr. Rajesh Kumar", title: "General Physician", avatar: "https://images.unsplash.com/`photo-1500648767791-00dcc994a43e?auto=format&fit=facearea&facepad=2.25&w=256&h=256&q=80", quote: "As a doctor, this platform streamlines my workflow significantly. The digital records are secure and easily accessible, which allows me to provide better, more informed care to my patients." }
+    { name: "Aditi M.", title: "Verified Patient", avatar: "https://images.unsplash.com/photo-1550525811-e5869dd03032?auto=format&fit=facearea&facepad=2&w=256&h=256&q=80", quote: "SwasthyaSetu has been a lifesaver. I can manage my entire family's health records and appointments from one app. It's incredibly intuitive and has saved me so much time and stress." },
+    { name: "Dr. Rajesh Kumar", title: "General Physician", avatar: "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=facearea&facepad=2.25&w=256&h=256&q=80", quote: "As a doctor, this platform streamlines my workflow significantly. The digital records are secure and easily accessible, which allows me to provide better, more informed care to my patients." }
   ];
 
   const healthcareGradientClass = "bg-gradient-to-r from-cyan-500 to-emerald-500";
