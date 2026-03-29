@@ -100,31 +100,23 @@ export default function Home() {
   const observerOptions = { threshold: 0.5, rootMargin: "-80px 0px 0px 0px" };
   const { ref: howItWorksRef, inView: howItWorksInView } = useInView(observerOptions);
   const { ref: featuresRef, inView: featuresInView } = useInView(observerOptions);
-  const { ref: pricingRef, inView: pricingInView } = useInView(observerOptions);
-  const { ref: aboutRef, inView: aboutInView } = useInView(observerOptions);
   const { ref: contactRef, inView: contactInView } = useInView(observerOptions);
 
   useEffect(() => {
     if (howItWorksInView) setActiveSection("how-it-works");
     if (featuresInView) setActiveSection("features");
-    if (pricingInView) setActiveSection("pricing");
-    if (aboutInView) setActiveSection("about");
     if (contactInView) setActiveSection("contact");
-  }, [howItWorksInView, featuresInView, pricingInView, aboutInView, contactInView]);
+  }, [howItWorksInView, featuresInView, contactInView]);
 
   const navItems = [
     { id: "how-it-works", name: "How It Works" },
     { id: "features", name: "Features" },
-    { id: "pricing", name: "Pricing" },
-    { id: "about", name: "Testimonials" },
     { id: "contact", name: "Contact" },
   ];
 
   const floatingNavIconMap: Record<string, ReactNode | undefined> = {
     "how-it-works": <CheckCircle className="h-4 w-4" />,
     features: <Zap className="h-4 w-4" />,
-    pricing: <CircleDollarSign className="h-4 w-4" />,
-    about: <Star className="h-4 w-4" />,
     contact: <PhoneCall className="h-4 w-4" />
   };
 
@@ -141,13 +133,6 @@ export default function Home() {
     { icon: FileText, title: "Digital Medical Records", description: "Secure, encrypted storage for all your medical documents and history." },
     { icon: Phone, title: "Emergency SOS", description: "One-tap emergency help with GPS tracking and ambulance dispatch." },
     { icon: Activity, title: "Health Monitoring", description: "Track vitals, manage medications, and receive personalized health insights." }
-  ];
-
-  const stats = [
-    { number: "50K+", label: "Happy Patients", icon: Users },
-    { number: "1000+", label: "Verified Doctors", icon: Stethoscope },
-    { number: "200+", label: "Partner Hospitals", icon: Heart },
-    { number: "24/7", label: "Emergency Support", icon: Clock }
   ];
 
   const bentoHighlights = [
@@ -174,17 +159,6 @@ export default function Home() {
     { icon: HeartHandshake, title: "Get Quality Care", description: "Book your appointment, have a consultation, and manage your health all in one place." }
   ];
 
-  const pricingPlans = [
-    { name: "Personal", price: "Free", description: "For individuals managing their personal health.", features: ["Secure Medical Records", "Book 5 Appointments/mo", "Basic Health Monitoring", "Community Support"], cta: "Get Started Free", isPopular: false },
-    { name: "Family Plus", price: "₹999", period: "/month", description: "For families to manage everyone's health together.", features: ["Everything in Personal", "Up to 5 Family Members", "Unlimited Appointments", "AI Consultation Credits", "Priority Support"], cta: "Choose Family Plan", isPopular: true },
-    { name: "Hospital", price: "Custom", description: "For clinics and hospitals to manage their patients.", features: ["Everything in Family Plus", "Unlimited Doctors & Staff", "Patient Management System", "Dedicated Account Manager", "API & Integrations"], cta: "Contact Sales", isPopular: false },
-  ];
-
-  const testimonials = [
-    { name: "Aditi M.", title: "Verified Patient", avatar: "https://images.unsplash.com/photo-1550525811-e5869dd03032?auto=format&fit=facearea&facepad=2&w=256&h=256&q=80", quote: "SwasthyaSetu has been a lifesaver. I can manage my entire family's health records and appointments from one app. It's incredibly intuitive and has saved me so much time and stress." },
-    { name: "Dr. Rajesh Kumar", title: "General Physician", avatar: "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=facearea&facepad=2.25&w=256&h=256&q=80", quote: "As a doctor, this platform streamlines my workflow significantly. The digital records are secure and easily accessible, which allows me to provide better, more informed care to my patients." }
-  ];
-
   const healthcareGradientClass = "bg-gradient-to-r from-cyan-500 to-emerald-500";
 
   return (
@@ -205,12 +179,10 @@ export default function Home() {
 
       {/* HERO */}
       <section id="hero" className="relative pt-32 pb-20 sm:pt-36 sm:pb-24 lg:pt-40 lg:pb-28 overflow-hidden isolate">
-        {/* backgrounds behind content */}
         <div className="absolute inset-0 -z-10 bg-gradient-to-br from-cyan-50 via-white to-emerald-50 opacity-80 pointer-events-none" />
         <div className="absolute top-[-20%] left-1/2 -translate-x-1/2 w-[1400px] h-[1400px] rounded-full -z-10 bg-emerald-200/40 blur-3xl pointer-events-none" />
 
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative">
-          {/* tighter grid + gap on large screens */}
           <div className="grid lg:grid-cols-[1.05fr_0.95fr] xl:grid-cols-[1.1fr_0.9fr] gap-10 xl:gap-16 items-center">
             {/* LEFT */}
             <motion.div variants={containerVariants} initial="hidden" animate="visible" className="space-y-8 relative z-20">
@@ -219,7 +191,6 @@ export default function Home() {
                 AI-Powered Connected Care
               </motion.div>
 
-              {/* headline */}
               <SplitText
                 text="Healthcare that truly listens"
                 tag="h1"
@@ -232,7 +203,6 @@ export default function Home() {
                 to={{ opacity: 1, y: 0 }}
               />
 
-              {/* ✅ simple, always-visible subtitle */}
               <motion.h2
                 initial={{ y: 12, opacity: 0 }}
                 animate={{ y: 0, opacity: 1 }}
@@ -285,41 +255,14 @@ export default function Home() {
                   </Button>
                 </Link>
               </div>
-
-              <div className="relative z-20 flex flex-col sm:flex-row sm:items-center sm:space-x-6 space-y-4 sm:space-y-0 pt-4">
-                <div className="flex -space-x-4">
-                  <img className="inline-block h-12 w-12 rounded-full ring-2 ring-white" src="https://images.unsplash.com/photo-1491528323818-fdd1faba62cc?auto=format&fit=facearea&facepad=2&w=256&h=256&q=80" alt="Patient Priya smiling" />
-                  <img className="inline-block h-12 w-12 rounded-full ring-2 ring-white" src="https://images.unsplash.com/photo-1550525811-e5869dd03032?auto=format&fit=facearea&facepad=2&w=256&h=256&q=80" alt="Doctor consultation" />
-                  <img className="inline-block h-12 w-12 rounded-full ring-2 ring-white" src="https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=facearea&facepad=2.25&w=256&h=256&q=80" alt="Patient happy after visit" />
-                </div>
-                <div>
-                  <div className="flex items-center space-x-1">{[...Array(5)].map((_, i) => <Star key={i} className="w-5 h-5 fill-yellow-400 text-yellow-400" />)}</div>
-                  <p className="text-sm text-slate-600 font-medium">Trusted by 50,000+ patients and 1,000+ clinicians</p>
-                </div>
-              </div>
             </motion.div>
 
-            {/* RIGHT — less empty space, nicely aligned */}
+            {/* RIGHT */}
             <div className="relative flex items-center justify-center z-10 lg:justify-self-start xl:justify-self-center">
               <div className="relative w-full">
                 <HeroDashboardPreview />
               </div>
             </div>
-          </div>
-        </div>
-      </section>
-
-      {/* STATS */}
-      <section className="py-20 bg-white">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8">
-            {stats.map((stat, index) => (
-              <motion.div key={index} initial={{ scale: 0.8, opacity: 0 }} whileInView={{ scale: 1, opacity: 1 }} transition={{ delay: index * 0.1, type: "spring", stiffness: 150 }} viewport={{ once: true, amount: 0.5 }} className="text-center">
-                <div className="flex justify-center mb-4"><div className="p-4 bg-cyan-100/60 rounded-full"><stat.icon className="w-8 h-8 text-cyan-600" /></div></div>
-                <div className="text-3xl font-bold text-slate-900 mb-2 sm:text-4xl">{stat.number}</div>
-                <div className="text-slate-500 font-medium">{stat.label}</div>
-              </motion.div>
-            ))}
           </div>
         </div>
       </section>
@@ -368,8 +311,6 @@ export default function Home() {
         </div>
       </section>
 
-      {/* --- SECTIONS BELOW MAGIC BENTO (ADDED) --- */}
-      
       {/* HOW IT WORKS */}
       <section id="how-it-works" ref={howItWorksRef} className="py-24 bg-white">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -403,7 +344,6 @@ export default function Home() {
         </div>
       </section>
 
-
       {/* FEATURES */}
       <section id="features" ref={featuresRef} className="py-24 bg-slate-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -431,76 +371,14 @@ export default function Home() {
         </div>
       </section>
 
-      {/* PRICING */}
-      <section id="pricing" ref={pricingRef} className="py-24 bg-white">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="text-center mb-16">
-            <motion.h2 initial={{ y: 20, opacity: 0 }} whileInView={{ y: 0, opacity: 1 }} viewport={{ once: true }} className="text-4xl lg:text-5xl font-bold tracking-tighter text-slate-900 mb-4">
-              Clear & Simple Pricing
-            </motion.h2>
-            <motion.p initial={{ y: 20, opacity: 0 }} whileInView={{ y: 0, opacity: 1 }} transition={{ delay: 0.1 }} viewport={{ once: true }} className="text-lg text-slate-600 max-w-3xl mx-auto">
-              Choose the plan that&apos;s right for you. No hidden fees, ever.
-            </motion.p>
-          </div>
-          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8 items-center">
-            {pricingPlans.map((plan, index) => (
-              <motion.div
-                key={index}
-                initial={{ y: 50, opacity: 0 }}
-                whileInView={{ y: 0, opacity: 1 }}
-                transition={{ delay: index * 0.15 }}
-                viewport={{ once: true }}
-                className={`h-full ${plan.isPopular ? 'transform lg:scale-105' : ''}`}
-              >
-                <Card className={`h-full flex flex-col relative overflow-hidden border-2 ${plan.isPopular ? 'border-cyan-500' : 'border-slate-200/80'}`}>
-                  {plan.isPopular && (<div className="absolute top-0 right-0 m-2 bg-cyan-500 text-white text-xs font-bold px-3 py-1 rounded-full">MOST POPULAR</div>)}
-                  <CardHeader className="p-8"><CardTitle className="text-2xl font-bold">{plan.name}</CardTitle><div className="flex items-baseline mt-2"><span className="text-4xl font-extrabold tracking-tight">{plan.price}</span>{plan.period && <span className="ml-1 text-xl font-semibold text-slate-500">{plan.period}</span>}</div><CardDescription className="mt-4">{plan.description}</CardDescription></CardHeader>
-                  <CardContent className="p-8 pt-0 flex-grow"><ul className="space-y-4">{plan.features.map((feature, fIndex) => (<li key={fIndex} className="flex items-start"><CheckCircle className="w-5 h-5 text-emerald-500 mr-3 flex-shrink-0 mt-1" /><span className="text-slate-700">{feature}</span></li>))}</ul></CardContent>
-                  <div className="p-8 pt-0 mt-auto"><Button size="lg" className={`w-full text-lg ${plan.isPopular ? `${healthcareGradientClass} text-white shadow-lg shadow-cyan-500/30` : 'bg-slate-200 text-slate-800 hover:bg-slate-300'}`}>{plan.cta}</Button></div>
-                </Card>
-              </motion.div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* TESTIMONIALS */}
-      <section id="about" ref={aboutRef} className="py-24 bg-slate-50">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="text-center mb-16">
-            <motion.h2 initial={{ y: 20, opacity: 0 }} whileInView={{ y: 0, opacity: 1 }} viewport={{ once: true }} className="text-4xl lg:text-5xl font-bold tracking-tighter text-slate-900 mb-4">Loved by Patients and Doctors</motion.h2>
-            <motion.p initial={{ y: 20, opacity: 0 }} whileInView={{ y: 0, opacity: 1 }} transition={{ delay: 0.1 }} viewport={{ once: true }} className="text-lg text-slate-600 max-w-3xl mx-auto">Don&apos;t just take our word for it. Here&apos;s what people are saying about SwasthyaSetu.</motion.p>
-          </div>
-          <div className="grid lg:grid-cols-2 gap-8">
-            {testimonials.map((testimonial, index) => (
-              <motion.div key={index} initial={{ y: 50, opacity: 0 }} whileInView={{ y: 0, opacity: 1 }} transition={{ delay: index * 0.15 }} viewport={{ once: true }}>
-                <Card className="h-full bg-white p-8 border border-slate-200/80 shadow-lg shadow-slate-200/50">
-                  <CardContent className="p-0 flex flex-col h-full">
-                    <div className="flex items-center mb-4">{[...Array(5)].map((_, i) => <Star key={i} className="w-5 h-5 fill-yellow-400 text-yellow-400" />)}</div>
-                    <blockquote className="text-slate-700 text-lg italic mb-6 flex-grow">&ldquo;{testimonial.quote}&rdquo;</blockquote>
-                    <div className="flex items-center">
-                      <img className="w-14 h-14 rounded-full mr-4" src={testimonial.avatar} alt={testimonial.name} />
-                      <div>
-                        <p className="font-semibold text-slate-900">{testimonial.name}</p>
-                        <p className="text-cyan-600 font-medium">{testimonial.title}</p>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              </motion.div>
-            ))}
-          </div>
-        </div>
-      </section>
-
       {/* CTA SECTION */}
       <section className={`py-20 relative overflow-hidden ${healthcareGradientClass}`}>
         <div className="absolute inset-0 opacity-20 bg-[radial-gradient(circle_at_top,_rgba(255,255,255,0.45),_transparent_65%)]"></div>
         <div className="max-w-4xl mx-auto text-center px-4 sm:px-6 lg:px-8 relative z-10">
           <motion.h2 initial={{ y: 20, opacity: 0 }} whileInView={{ y: 0, opacity: 1 }} viewport={{ once: true }} className="text-4xl font-bold text-white mb-6">Ready to Transform Your Healthcare Experience?</motion.h2>
-          <motion.p initial={{ y: 20, opacity: 0 }} whileInView={{ y: 0, opacity: 1 }} transition={{ delay: 0.1 }} viewport={{ once: true }} className="text-xl text-cyan-100 mb-10">Join thousands of patients and hundreds of providers revolutionizing healthcare with SwasthyaSetu.</motion.p>
+          <motion.p initial={{ y: 20, opacity: 0 }} whileInView={{ y: 0, opacity: 1 }} transition={{ delay: 0.1 }} viewport={{ once: true }} className="text-xl text-cyan-100 mb-10">Join our growing platform and revolutionise your healthcare journey with SwasthyaSetu.</motion.p>
           <motion.div initial={{ y: 20, opacity: 0 }} whileInView={{ y: 0, opacity: 1 }} transition={{ delay: 0.2 }} viewport={{ once: true }} className="space-y-4 sm:space-y-0 sm:space-x-4 sm:flex sm:justify-center">
-            <Link href="/auth"><Button size="lg" className="bg-white text-cyan-600 hover:bg-slate-100 px-8 py-3 text-lg font-bold w-full sm:w-auto transform hover:scale-105 transition-transform">Get Started For Free</Button></Link>
+            <Link href="/auth"><Button size="lg" className="bg-white text-cyan-600 hover:bg-slate-100 px-8 py-3 text-lg font-bold w-full sm:w-auto transform hover:scale-105 transition-transform">Get Started</Button></Link>
             <Link href="#contact"><Button size="lg" className="bg-white/10 border border-white/80 text-white hover:bg-white/20 px-8 py-3 text-lg w-full sm:w-auto font-bold transition-colors">Schedule a Demo</Button></Link>
           </motion.div>
         </div>
@@ -541,7 +419,7 @@ export default function Home() {
               <p className="text-slate-400">Connecting healthcare, empowering lives. Your trusted partner in modern digital health.</p>
             </div>
             <div className="col-span-1"><h4 className="text-lg font-semibold text-white mb-4">Platform</h4><ul className="space-y-3 text-slate-400"><li><Link href="/auth" className="hover:text-white transition-colors">Patient Portal</Link></li><li><Link href="/auth" className="hover:text-white transition-colors">Doctor Portal</Link></li><li><Link href="/auth" className="hover:text-white transition-colors">Hospital Management</Link></li><li><Link href="/emergency" className="hover:text-white transition-colors">Emergency SOS</Link></li></ul></div>
-            <div className="col-span-1"><h4 className="text-lg font-semibold text-white mb-4">Company</h4><ul className="space-y-3 text-slate-400"><li><Link href="#about" className="hover:text-white transition-colors">About Us</Link></li><li><Link href="#contact" className="hover:text-white transition-colors">Contact</Link></li><li><Link href="#" className="hover:text-white transition-colors">Careers</Link></li><li><Link href="#" className="hover:text-white transition-colors">Press</Link></li></ul></div>
+            <div className="col-span-1"><h4 className="text-lg font-semibold text-white mb-4">Company</h4><ul className="space-y-3 text-slate-400"><li><Link href="/about" className="hover:text-white transition-colors">About Us</Link></li><li><Link href="#contact" className="hover:text-white transition-colors">Contact</Link></li><li><Link href="#" className="hover:text-white transition-colors">Careers</Link></li><li><Link href="#" className="hover:text-white transition-colors">Press</Link></li></ul></div>
             <div className="col-span-1"><h4 className="text-lg font-semibold text-white mb-4">Legal</h4><ul className="space-y-3 text-slate-400"><li><Link href="#" className="hover:text-white transition-colors">Privacy Policy</Link></li><li><Link href="#" className="hover:text-white transition-colors">Terms of Service</Link></li></ul></div>
           </div>
           <div className="border-t border-slate-800 mt-12 pt-8 text-center text-slate-500"><p>&copy; {new Date().getFullYear()} SwasthyaSetu. All rights reserved. Built with ❤️ for better healthcare.</p></div>

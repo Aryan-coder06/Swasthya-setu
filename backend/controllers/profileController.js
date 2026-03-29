@@ -1,4 +1,3 @@
-
 import supabase from "../main_server.js";
 
 const add_doc = async (req, res) => {
@@ -105,5 +104,41 @@ const fetch_metadata = async (req, res) => {
   res.json(data);
 };
 
+// --- NEW FUNCTION ADDED HERE ---
+const update_profile = async (req, res) => {
+  try {
+    // Only extracting fields that currently exist in your Supabase DB
+    // ProfilePic is removed as per the PR review request.
+    const { 
+      userId, firstName, lastName, phone_no 
+    } = req.body;
 
-export { add_doc, fetch_doc, fetch_metadata };
+    if (!userId) {
+      return res.status(400).json({ message: "User ID is required" });
+    }
+
+    // Update the Patient_Profile table with safe fields only
+    const { data, error } = await supabase
+      .from("Patient_Profile")
+      .update({
+        firstName,
+        lastName,
+        phone_no
+      })
+      .eq("id", userId)
+      .select();
+
+    if (error) {
+      console.error("Update Error:", error.message);
+      return res.status(400).json({ message: error.message });
+    }
+
+    return res.status(200).json({ message: "Profile updated successfully", data });
+  } catch (error) {
+    console.error("Server Error during profile update:", error);
+    return res.status(500).json({ message: "Internal server error" });
+  }
+};
+
+// Don't forget to export the new function
+export { add_doc, fetch_doc, fetch_metadata, update_profile };
