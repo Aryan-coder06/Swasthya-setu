@@ -107,28 +107,23 @@ const fetch_metadata = async (req, res) => {
 // --- NEW FUNCTION ADDED HERE ---
 const update_profile = async (req, res) => {
   try {
+    // Only extracting fields that currently exist in your Supabase DB
+    // ProfilePic is removed as per the PR review request.
     const { 
-      userId, firstName, lastName, phone_no, 
-      dob, address, city, state, pincode, profilePic 
+      userId, firstName, lastName, phone_no 
     } = req.body;
 
     if (!userId) {
       return res.status(400).json({ message: "User ID is required" });
     }
 
-    // Update the Patient_Profile table
+    // Update the Patient_Profile table with safe fields only
     const { data, error } = await supabase
       .from("Patient_Profile")
       .update({
         firstName,
         lastName,
-        phone_no,
-        dob,
-        address,
-        city,
-        state,
-        pincode,
-        profilePic
+        phone_no
       })
       .eq("id", userId)
       .select();
